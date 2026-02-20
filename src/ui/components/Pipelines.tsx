@@ -173,7 +173,7 @@ export default function Pipelines() {
       <p className="subtitle">Run AI-powered content generation pipelines with your brand voice.</p>
 
       {/* Pipeline Cards Grid */}
-      <div className="pipeline-cards">
+      <div className="pipeline-cards pipeline-grid">
         {pipelines.length === 0 ? (
           <div className="card">
             <div className="empty-state">

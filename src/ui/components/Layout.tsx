@@ -20,7 +20,10 @@ interface Props {
 }
 
 export default function Layout({ currentPage, onNavigate, children }: Props) {
-  const [collapsed, setCollapsed] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(() => {
+    // Collapsed by default on mobile, expanded on desktop
+    return typeof window !== 'undefined' && window.innerWidth < 768;
+  });
 
   return (
     <div className="layout">

@@ -341,6 +341,7 @@ export default function Dashboard({ onNavigate }: Props) {
               placeholder="Paste your content here — blog post, tweet, article..."
               value={repurposeText}
               onChange={e => setRepurposeText(e.target.value)}
+              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !repurposeLoading) handleRepurpose(); }}
               style={{ minHeight: '80px' }}
             />
           </div>

@@ -185,17 +185,25 @@ export default function Brands() {
             </div>
           ) : (
             brands.map(b => (
-              <div key={b.id} className="brand-card" onClick={() => viewBrand(b.id)}>
-                <div className="brand-card-name">{b.name}</div>
+              <div key={b.id} className="brand-card card-clickable" onClick={() => viewBrand(b.id)}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div className="brand-card-name">{b.name}</div>
+                  {b.id?.startsWith('template-') && (
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: 'var(--info)', whiteSpace: 'nowrap' }}>Template</span>
+                  )}
+                </div>
                 <div className="brand-card-tones">
                   {(b.voice?.tone || []).map((t: string) => (
                     <span key={t} className="tone-pill">{t}</span>
                   ))}
                 </div>
                 <div className="brand-card-platforms">
-                  {(b.platforms || []).map((p: string) => {
-                    const opt = PLATFORM_OPTIONS.find(o => o.id === p);
-                    return <span key={p} className="platform-badge" title={p}>{opt?.icon || '📄'}</span>;
+                  {(b.platforms || []).map((p: any, i: number) => {
+                    const platformId = typeof p === 'string' ? p : p?.platform || p?.id || '';
+                    const isEnabled = typeof p === 'string' ? true : p?.enabled !== false;
+                    const opt = PLATFORM_OPTIONS.find(o => o.id === platformId);
+                    if (!isEnabled || !platformId) return null;
+                    return <span key={platformId + i} className="platform-badge" title={opt?.label || platformId}>{opt?.icon || '📄'}</span>;
                   })}
                   {(!b.platforms || b.platforms.length === 0) && (
                     <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>All platforms</span>
