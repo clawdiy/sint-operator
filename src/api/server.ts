@@ -142,7 +142,7 @@ function enqueueAsyncRun(
         if (isTelegramConfigured()) {
           void notifyPipelineComplete(
             asyncRun.pipelineId, asyncRun.brandId, asyncRun.id, 'completed',
-            { duration: Date.now() - new Date(asyncRun.startedAt).getTime(), costUnits: (result as any)?.metering?.totalCostUnits, tokensUsed: (result as any)?.metering?.totalTokens }
+            { duration: Date.now() - new Date(asyncRun.startedAt).getTime(), costUnits: (result as Record<string, any>)?.metering?.totalCostUnits, tokensUsed: (result as Record<string, any>)?.metering?.totalTokens }
           );
         }
       })

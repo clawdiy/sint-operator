@@ -404,14 +404,16 @@ export class Orchestrator {
 
     const result = await skill.execute(ctx);
 
-    this.metering.trackUsage({
+    this.metering.record({
+      id: \`mcp-\${Date.now()}-\${Math.random().toString(36).slice(2, 8)}\`,
       runId: \`mcp-\${Date.now()}\`,
       stepId: skillId,
       model: result.modelUsed,
-      tier: 'routine',
+      tier: 'routine' as const,
       inputTokens: 0,
       outputTokens: 0,
       costUnits: result.costUnits,
+      timestamp: new Date().toISOString(),
     });
 
     return result;

@@ -94,21 +94,29 @@ export function createPublishRoutes(): Router {
 
   // Get queue
   router.get('/queue', (req, res) => {
-    const { status, brandId } = req.query;
-    const items = getQueue({
-      status: status as string | undefined,
-      brandId: brandId as string | undefined,
-    });
-    res.json({ items, total: items.length });
+    try {
+      const { status, brandId } = req.query;
+      const items = getQueue({
+        status: status as string | undefined,
+        brandId: brandId as string | undefined,
+      });
+      res.json({ items, total: items.length });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
   });
 
   // Cancel queue item
   router.delete('/queue/:id', (req, res) => {
-    const success = cancelQueueItem(req.params.id);
-    if (success) {
-      res.json({ cancelled: true });
-    } else {
-      res.status(404).json({ error: 'Item not found or already processed' });
+    try {
+      const success = cancelQueueItem(req.params.id);
+      if (success) {
+        res.json({ cancelled: true });
+      } else {
+        res.status(404).json({ error: 'Item not found or already processed' });
+      }
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
     }
   });
 
