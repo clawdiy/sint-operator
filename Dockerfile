@@ -9,11 +9,15 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Install ALL deps (including devDeps for tsc build)
 COPY package.json package-lock.json* ./
-RUN npm install --production
+RUN npm install
 
 COPY . .
-RUN npm run build
+RUN npx tsc
+
+# Prune devDeps after build
+RUN npm prune --production
 
 EXPOSE 18789
 
