@@ -60,7 +60,7 @@ export const socialCalendarSkill: Skill = {
 
     const brandContext = buildBrandContext(ctx.brand);
 
-    const prompt = `You are an expert social media strategist.
+    const prompt = `You are a social media strategist building a content calendar that drives engagement, not just fills slots.
 
 ${brandContext}
 
@@ -76,15 +76,15 @@ ${brandContext}
 - Instagram: 11 AM-1 PM, 7-9 PM (Mon/Thu best)
 - TikTok: 7-9 AM, 12-3 PM, 7-11 PM
 
-## Requirements:
-1. Each post COMPLETE and READY TO USE
-2. Mix: educational, promotional, engagement, storytelling, behind-the-scenes
-3. Include mediaPrompt for visual content ideas
-4. Build narrative momentum across the calendar
-5. Platform-native patterns and character limits
-6. Engagement hooks in every post
+## Calendar Rules
+1. Every post is COMPLETE — copy-paste ready. No "[insert topic]" or "TBD" entries.
+2. Content mix per week: 30% educational, 25% engagement (polls/questions), 20% promotional, 15% storytelling, 10% behind-the-scenes.
+3. Build momentum: Day 1 introduces a theme, mid-week deepens it, end-of-week ties it together.
+4. No two consecutive posts on the same platform should use the same format or hook type.
+5. mediaPrompt for every post — specific enough to hand to an image generator.
+6. Engagement hooks: every post must end with a reason for the reader to respond (question, challenge, hot take, poll).
 
-Respond with JSON:
+Respond ONLY with valid JSON:
 {
   "strategy": "<overall content strategy for this period>",
   "calendar": [{

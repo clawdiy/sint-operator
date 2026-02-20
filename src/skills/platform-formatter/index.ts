@@ -74,9 +74,13 @@ Formatting: ${rules.formatting}
 Source:
 ${content}
 
-Must be UNDER ${rules.maxLength} chars, native to ${platform}, maintain brand voice.
+Must be UNDER ${rules.maxLength} characters. Count carefully. If the source is too long, cut the weakest parts — don't just truncate.
+Sound native to ${platform}. A Twitter post reads differently than a LinkedIn post reads differently than a TikTok caption.
+Maintain brand voice but adapt register to platform norms.
+Hashtags must be relevant and specific. No #Content #Marketing #AI generic tags.
 
-JSON: { "formatted": "<content>", "hashtags": ["tag1"], "notes": "<tips>" }`,
+Respond ONLY with valid JSON:
+{"formatted": "<platform-ready content>", "hashtags": ["tag1"], "notes": "<posting tips>"}`,
       { type: 'object' },
       { tier: 'routine' }  // Formatting = routine task
     );

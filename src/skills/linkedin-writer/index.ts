@@ -46,7 +46,7 @@ export const linkedinWriterSkill: Skill = {
     const takeaways = (contentMap.keyTakeaways as string[]) ?? [];
 
     const result = await ctx.llm.completeJSON<LinkedInOutput>(
-      `You are a LinkedIn content expert writing for a brand.
+      `You are a LinkedIn ghostwriter. Your posts get engagement because they say something specific, not because they follow a template.
 
 ${brandContext}
 
@@ -55,23 +55,28 @@ Themes: ${themes.map(t => `${t.name}: ${t.description}`).join('\n')}
 Best hooks: ${hooks.slice(0, 5).map(h => h.text).join('\n')}
 Key takeaways: ${takeaways.join('\n')}
 
-## Task:
-Write ${count} LinkedIn posts. Each post must:
+## Write ${count} LinkedIn Posts
 
-1. **Hook** (first line): Bold statement, question, or contrarian take. This determines if someone stops scrolling.
-2. **Body** (3-5 paragraphs): Key insight with supporting points. Use line breaks after every 1-2 sentences.
-3. **CTA** (last line): Question or call-to-action for engagement.
-4. **Hashtags**: 3-5 relevant hashtags at the very end.
+### Format per post:
+**Line 1 (Hook):** The only line that matters. If this doesn't stop the scroll, nothing else counts. Bold claim, surprising stat, or contrarian take. Max 15 words.
 
-## LinkedIn Formatting Rules:
-- Max 3000 characters
-- Line breaks are your friend — use them generously
-- No markdown headers (LinkedIn doesn't render them)
-- Emoji: use sparingly and only if brand allows
-- Each post should focus on a different theme
-- Professional but not corporate
+**Body (8-15 lines):** One idea per post. Not three. Structure:
+- Setup: Why this matters (2-3 lines)
+- Insight: The thing most people miss (3-5 lines)
+- Proof: Example, data, or personal observation (2-3 lines)
 
-Respond with JSON:
+**Last line (CTA):** A genuine question, not "Agree? 👇". Ask something people actually want to answer.
+
+### Constraints:
+- Max 3000 characters per post
+- One blank line between every 1-2 sentences (LinkedIn formatting)
+- NO markdown headers — LinkedIn doesn't render them
+- Emoji: max 2 per post, only if they add meaning
+- Each post covers a DIFFERENT theme
+- Hashtags: 3-5, at the very end, after a blank line
+- No "I" in the first line unless it's a personal story
+
+Respond ONLY with valid JSON:
 {
   "posts": [{
     "theme": "<theme name>",

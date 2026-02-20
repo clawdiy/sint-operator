@@ -136,7 +136,7 @@ ${JSON.stringify(contentMap, null, 2).slice(0, 5000)}
 Use the hooks, themes, and platform suitability scores to guide your content creation.
 Prioritize the highest-scoring hooks for each platform.` : '';
 
-    const prompt = `You are a world-class content strategist. Repurpose the following source content into platform-specific deliverables.
+    const prompt = `You are a content repurposing specialist. Your job: take one piece of content and make it native to each target platform. Not reformatted — reimagined.
 
 ${brandContext}
 
@@ -150,17 +150,15 @@ ${focus ? `## Focus Angle: ${focus}` : ''}
 ## Target Platforms and Specifications:
 ${platformInstructions}
 
-## Instructions:
-1. For EACH platform, create content that:
-   - Uses the best hook identified for that platform's audience
-   - Follows native content patterns and algorithm preferences
-   - Respects character/format limits exactly
-   - Maintains brand voice
-   - Is COMPLETE and READY TO POST
-2. For video platforms (TikTok, Reels, Shorts): include a script with visual directions
-3. Include a mediaPrompt for each piece describing the ideal visual to pair with it
+## Rules
+- Every deliverable must be READY TO COPY-PASTE AND POST. No placeholders like [insert X].
+- Each platform version uses a different hook. Do not repeat the same opening.
+- Video platforms (TikTok, Reels, Shorts): provide a script with [VISUAL: description] cues on separate lines.
+- Hashtags: research-quality tags, not generic (#content #marketing = lazy).
+- mediaPrompt: describe the exact visual that would make this post perform — composition, mood, style, subject.
+- If the source content doesn't have enough substance for a platform, say so in notes instead of padding with filler.
 
-Respond with JSON:
+Respond ONLY with valid JSON:
 {
   "deliverables": [
     {

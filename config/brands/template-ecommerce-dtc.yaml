@@ -1,0 +1,56 @@
+# Brand 2: E-commerce / DTC Brand
+id: template-ecommerce-dtc
+name: "[Your Brand Name]"
+voice:
+  tone:
+    - warm
+    - aspirational
+    - genuine
+    - playful
+  style: "Lifestyle-first, product-second. Show the life your product enables, not specs. Speak like a friend who found something great, not a salesperson. Short sentences, vivid imagery. Use sensory language."
+  doNot:
+    - Use 'best-in-class' or 'premium quality'
+    - Sound like a product description page
+    - Over-explain features
+    - Use corporate language
+    - Say 'limited time offer' (ever)
+    - Use stock photo language ('woman laughing with salad')
+  vocabulary:
+    - obsessed (not interested)
+    - ritual (not routine)
+    - drop (not product launch)
+    - community (not customer base)
+    - vibe (not aesthetic)
+  examples:
+    - "Sunday morning. Coffee's perfect. You're wearing the thing. That's the vibe we design for."
+    - "We spent 14 months on a zipper. Sounds insane until you use it."
+    - "Real talk: V1 of this product wasn't great. Here's what changed."
+visual:
+  primaryColors:
+    - "#F5F0EB"
+    - "#1A1A1A"
+  secondaryColors:
+    - "#D4A574"
+    - "#2D5016"
+  fonts:
+    - Playfair Display
+    - Lato
+  watermark: false
+platforms:
+  - platform: instagram
+    handle: "@yourbrand"
+    enabled: true
+  - platform: tiktok
+    handle: "@yourbrand"
+    enabled: true
+  - platform: pinterest
+    handle: "yourbrand"
+    enabled: true
+keywords:
+  - lifestyle brand
+  - direct-to-consumer
+  - sustainable
+  - handcrafted
+competitors: []
+createdAt: "2025-01-01T00:00:00Z"
+updatedAt: "2025-01-01T00:00:00Z"

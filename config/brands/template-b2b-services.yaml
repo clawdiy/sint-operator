@@ -1,0 +1,53 @@
+# Brand 3: B2B / Professional Services
+id: template-b2b-services
+name: "[Your Firm Name]"
+voice:
+  tone:
+    - authoritative
+    - measured
+    - practical
+    - credible
+  style: "Lead with insight, not credentials. Every post should teach something or challenge a common assumption. Use case studies and specific numbers over generalities. Write at a senior-manager reading level — intelligent but time-poor."
+  doNot:
+    - Say 'thought leadership' unironically
+    - Use 'synergy' or 'leverage' as verbs
+    - Start with 'As a leader in...'
+    - Name-drop without adding value
+    - Use jargon that excludes non-specialists
+    - Write paragraphs longer than 3 lines on LinkedIn
+  vocabulary:
+    - results (not deliverables)
+    - approach (not methodology or framework)
+    - team (not talent or human capital)
+    - problem (not challenge or opportunity)
+    - cost (not investment when you mean cost)
+  examples:
+    - "Our client cut onboarding time from 6 weeks to 8 days. Not with more people — with better process design."
+    - "The consulting industry has a dirty secret: most frameworks are the same framework with different colors. Here's what actually differentiates outcomes."
+    - "3 questions we ask before every engagement. If the answers are wrong, we walk away."
+visual:
+  primaryColors:
+    - "#1E293B"
+    - "#FFFFFF"
+  secondaryColors:
+    - "#0EA5E9"
+    - "#F1F5F9"
+  fonts:
+    - IBM Plex Sans
+    - IBM Plex Mono
+  watermark: false
+platforms:
+  - platform: linkedin
+    handle: "yourfirm"
+    enabled: true
+  - platform: twitter
+    handle: "@yourfirm"
+    enabled: true
+keywords:
+  - consulting
+  - business strategy
+  - digital transformation
+  - operational efficiency
+competitors: []
+createdAt: "2025-01-01T00:00:00Z"
+updatedAt: "2025-01-01T00:00:00Z"

@@ -56,7 +56,7 @@ export const brandResearcherSkill: Skill = {
     const competitors = (ctx.inputs.competitors as string[]) ?? [];
 
     const result = await ctx.llm.completeJSON<BrandDirection>(
-      `You are a world-class brand strategist and visual identity expert.
+      `You are a brand strategist creating a data-driven brand direction.
 
 ## Task:
 Create a comprehensive brand direction document for a new brand in the **${industry}** industry.
@@ -65,16 +65,22 @@ ${competitors.length > 0 ? `## Competitors to Analyze:\n${competitors.join(', ')
 
 ${Object.keys(brandQuiz).length > 0 ? `## Brand Personality Quiz Results:\n${JSON.stringify(brandQuiz, null, 2)}` : ''}
 
-## Requirements:
+## Deliverables
 
-1. **Industry Trends**: Current visual and branding trends in ${industry}
-2. **Competitor Analysis**: For each competitor, analyze their visual language, strengths, weaknesses
-3. **Color Theory**: Recommend a color direction with psychology rationale
-   - Consider industry norms, target audience, emotional associations
-   - Apply color psychology (blue=trust, red=energy, green=growth, etc.)
-4. **Shape Language**: Recommend shapes/forms based on brand personality
-   - Geometric = precision/tech, Organic = natural/friendly, Angular = bold/modern
-5. **Brand Direction**: Overall positioning, personality traits, visual strategy, differentiators
+### 1. Industry Trends (visual + messaging)
+Current trends in ${industry} branding. Not generic design trends — specific to this industry's audience expectations.
+
+### 2. Competitor Analysis
+For each competitor: visual language, strengths, and vulnerabilities. If you don't have real data on a competitor, say so — don't fabricate brand audits.
+
+### 3. Color Direction
+Recommend a palette with psychology rationale. Go beyond "blue = trust." Explain why THIS shade for THIS audience in THIS competitive landscape.
+
+### 4. Shape Language
+Geometric (precision/tech), organic (natural/friendly), angular (bold/disruptive), mixed. Tie to brand personality, not trends.
+
+### 5. Brand Direction
+Positioning statement, 3-5 personality traits, visual strategy, and 2-3 differentiators that are DEFENSIBLE (not "high quality" — everyone says that).
 
 Respond with JSON:
 {

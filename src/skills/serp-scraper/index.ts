@@ -65,15 +65,16 @@ export const serpScraperSkill: Skill = {
 Results:
 ${results.map((r, i) => `${i + 1}. "${r.title}" — ${r.snippet}`).join('\n')}
 
-Identify:
-1. Average estimated word count of top results
-2. Common heading patterns (H2/H3 topics)
-3. Content gaps — what are these articles NOT covering well?
-4. Media usage patterns (images, videos, infographics)
-5. Internal/external link patterns
-6. Keyword difficulty estimate
+Analyze:
+1. **avgWordCount** — Estimate based on snippet depth and ranking positions. Top 3 results indicate the competitive bar.
+2. **commonHeadings** — H2/H3 topics appearing across multiple results. Format: "H2: Topic Name"
+3. **contentGaps** — Questions a searcher has that NONE of these results answer well. Be specific. "More examples" is lazy. "Step-by-step migration guide from X to Y" is useful.
+4. **mediaUsage** — Do top results use video, infographics, comparison tables? What's missing?
+5. **linkPatterns** — Do they cite studies, link to tools, reference official docs?
+6. **difficulty** — low (thin content, few authoritative sites), medium (decent but beatable), high (strong domains with deep content)
 
-JSON: {
+Respond ONLY with valid JSON:
+{
   "avgWordCount": 0,
   "commonHeadings": ["H2: Topic"],
   "contentGaps": ["gap1"],

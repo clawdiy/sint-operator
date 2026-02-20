@@ -72,7 +72,7 @@ export const contentAnalyzerSkill: Skill = {
 
     const hasTimestamps = segments.length > 0;
 
-    const prompt = `You are an expert content strategist analyzing source material for multi-platform repurposing.
+    const prompt = `You are a content strategist who specializes in extracting maximum value from long-form content for social media distribution.
 
 ${brandContext}
 
@@ -88,19 +88,17 @@ ${segments.slice(0, 30).map((s, i) =>
 
 ## Target Platforms: ${platforms.join(', ')}
 
-## Your Task:
-Perform a deep content analysis and produce a content map with:
+## Extraction Rules
+1. **Themes** — 3-5 distinct angles. Score relevance 0.0-1.0 based on audience interest + shareability, not just frequency.
+2. **Quotables** — 5-10 statements that work standalone. Must make sense without surrounding context. No "As I mentioned earlier..." quotes.
+3. **Data Points** — Hard numbers, statistics, specific claims. If the source has none, return empty array. Do NOT fabricate data.
+4. **Hooks** — Top 10 scroll-stopping openers. Each must work as the first line someone reads. Classify: question | statistic | contrarian | story | pain_point | transformation.
+5. **Platform Fit** — Score 0.0-1.0 per platform. 0.8+ means native to that platform. 0.3 or below means force-fitting.
+6. **Takeaways** — What should the audience DO differently after consuming this?
 
-1. **Themes**: Identify 3-5 key themes/topics with relevance scores (0-1)
-2. **Quotable Moments**: Extract 5-10 specific quotes or statements that are shareable as-is
-3. **Data Points**: Find any statistics, numbers, or concrete facts
-4. **Hooks**: Identify the TOP 10 "hook" moments — these are attention-grabbing openings for short-form content. Classify each hook type (question, statistic, contrarian take, story opener, pain point, transformation)
-5. **Platform Suitability**: Score each platform (0-1) and suggest best content format and angle
-6. **Key Takeaways**: 3-5 main points a reader/viewer should remember
+${hasTimestamps ? 'Include segment indices and timestamps for hooks and quotables. Timestamps must reference actual segments above.' : ''}
 
-${hasTimestamps ? 'For video content: include segment indices and timestamps for hooks and quotables.' : ''}
-
-Respond with JSON matching this structure:
+Respond ONLY with valid JSON:
 {
   "summary": "<2-3 sentence content summary>",
   "themes": [{ "name": "", "description": "", "relevanceScore": 0.0 }],

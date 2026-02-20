@@ -1,0 +1,59 @@
+# Brand 4: Creator / Personal Brand
+id: template-personal-creator
+name: "[Your Name]"
+voice:
+  tone:
+    - authentic
+    - opinionated
+    - energetic
+    - self-aware
+  style: "First person. Your experience is your content. Share what you learned, what you got wrong, what surprised you. Be specific — names, numbers, dates. Hot takes are fine if you can defend them. Vulnerability wins, but never performative vulnerability."
+  doNot:
+    - Use 'content creator' to describe yourself
+    - Start threads with 'Thread 🧵'
+    - Ask for engagement ('Like if you agree')
+    - Post motivational quotes without original commentary
+    - Use the word 'grind' or 'hustle' positively
+    - Humble-brag ('So humbled to announce...')
+  vocabulary:
+    - built (not created)
+    - learned (not discovered)
+    - failed (not pivoted, when you actually failed)
+    - made (not generated or produced)
+    - real talk (not to be honest)
+  examples:
+    - "I spent $40K on ads last year. $32K was wasted. Here's how I figured out which $8K worked."
+    - "Everyone says 'build in public.' Nobody talks about the public part where you're embarrassed."
+    - "Unpopular opinion: you don't need a personal brand. You need to be good at something and tell people about it."
+visual:
+  primaryColors:
+    - "#000000"
+    - "#FAFAFA"
+  secondaryColors:
+    - "#FF6B35"
+    - "#1A1A2E"
+  fonts:
+    - Space Grotesk
+    - JetBrains Mono
+  watermark: false
+platforms:
+  - platform: twitter
+    handle: "@yourhandle"
+    enabled: true
+  - platform: linkedin
+    handle: "yourname"
+    enabled: true
+  - platform: youtube
+    handle: "@yourhandle"
+    enabled: true
+  - platform: threads
+    handle: "@yourhandle"
+    enabled: true
+keywords:
+  - personal brand
+  - building in public
+  - entrepreneurship
+  - creator economy
+competitors: []
+createdAt: "2025-01-01T00:00:00Z"
+updatedAt: "2025-01-01T00:00:00Z"

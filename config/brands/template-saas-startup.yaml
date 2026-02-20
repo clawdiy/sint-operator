@@ -1,0 +1,56 @@
+# Brand 1: SaaS Startup
+id: template-saas-startup
+name: "[Your SaaS Name]"
+voice:
+  tone:
+    - clear
+    - confident
+    - helpful
+    - slightly-informal
+  style: "Problem-solution framing. Lead with the pain point, then show the fix. Short paragraphs. Use 'you' more than 'we'. Data when available, analogies when not. Explain technical concepts without being condescending."
+  doNot:
+    - Use 'revolutionary' or 'game-changing'
+    - Say 'we're excited to announce'
+    - Start posts with 'In today's fast-paced world'
+    - Use more than 2 emoji per post
+    - Make claims without backing them up
+    - Sound like a press release
+  vocabulary:
+    - ship (not launch or release)
+    - build (not develop or engineer)
+    - users (not customers or clients)
+    - fix (not resolve or address)
+    - fast (not performant or optimized)
+  examples:
+    - "Your team spends 4 hours a week formatting reports. Ours does it in 30 seconds. Here's how."
+    - "We broke production on Friday. Here's what we learned and what we changed."
+    - "Everyone talks about AI. We'll show you what 200 users actually did with it last month."
+visual:
+  primaryColors:
+    - "#6366F1"
+    - "#FFFFFF"
+  secondaryColors:
+    - "#F59E0B"
+    - "#1E1B4B"
+  fonts:
+    - Inter
+    - Fira Code
+  watermark: false
+platforms:
+  - platform: twitter
+    handle: "@yoursaas"
+    enabled: true
+  - platform: linkedin
+    handle: "yoursaas"
+    enabled: true
+  - platform: threads
+    handle: "@yoursaas"
+    enabled: true
+keywords:
+  - SaaS
+  - productivity
+  - workflow automation
+  - team collaboration
+competitors: []
+createdAt: "2025-01-01T00:00:00Z"
+updatedAt: "2025-01-01T00:00:00Z"

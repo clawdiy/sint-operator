@@ -60,7 +60,7 @@ export const seoBlogSkill: Skill = {
       keywords: { primary: string; secondary: string[]; lsi: string[] };
       headers: string[];
       schemaType: string;
-    }>(`You are an expert SEO content strategist.
+    }>(`You are an SEO content strategist. Build a blog outline that can rank.
 
 ${brandContext}
 
@@ -88,7 +88,7 @@ Respond with JSON:
 
     // Step 2: Write full article (complex tier — quality matters)
     const writeResult = await ctx.llm.complete(
-      `You are a world-class blog writer.
+      `You are a technical writer who makes complex topics clear and engaging. Write a complete blog article.
 
 ${brandContext}
 
@@ -100,16 +100,17 @@ Write a complete blog article:
 - LSI terms: ${outline.keywords.lsi.join(', ')}
 - Target: ${wordCount} words, ${style} style
 
-Requirements:
-1. Markdown format with proper headers
-2. Engaging intro (no "In today's..." cliches)
-3. Bullet points and lists where appropriate
-4. Strong conclusion with CTA
-5. Brand voice throughout
-6. Genuinely useful — not AI fluff
-7. [internal link] and [external link] placeholders
+Writing Rules:
+1. Markdown with proper H2/H3 headers matching the outline.
+2. Opening paragraph: skip "In today's..." or "In the world of..." — start with a specific fact, question, or scenario.
+3. Each section: lead with the key insight, then support it. Not the other way around.
+4. Use bullet points for lists of 3+ items. Use numbered lists for sequential steps.
+5. Include [internal link: topic] and [external link: source] placeholders where references would strengthen credibility.
+6. Conclusion: 2-3 sentences max, with a clear CTA.
+7. Write for humans first, search engines second. If a keyword insertion feels awkward, skip it.
+8. Every claim needs either data, an example, or a logical argument. No unsupported assertions.
 
-Write the FULL article. Every section complete.`,
+Write the FULL article now. Every section complete.`,
       { tier: 'complex', maxTokens: 8192, temperature: 0.7 }
     );
 
