@@ -19,6 +19,7 @@ import cors from 'cors';
 import multer from 'multer';
 import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
+import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
 
 // ─── Async Run Store ──────────────────────────────────────────
 
@@ -170,6 +171,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   
   // ─── Publish Routes ──────────────────────────────────────
   app.use("/api/publish", createPublishRoutes());
+  app.use("/mcp", createMCPRoutes(orchestrator));
 
   const upload = multer({ dest: '/tmp/sint-uploads/' });
 

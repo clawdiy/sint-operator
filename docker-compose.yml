@@ -16,6 +16,9 @@ services:
       - TWITTER_ACCESS_SECRET=${TWITTER_ACCESS_SECRET}
       - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN}
       - LINKEDIN_PERSON_URN=${LINKEDIN_PERSON_URN}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - DASHBOARD_URL=${DASHBOARD_URL}
     volumes:
       - sint-data:/app/data
     restart: unless-stopped

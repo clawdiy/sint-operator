@@ -380,6 +380,43 @@ export class Orchestrator {
     this.metering.setLimits(limits);
   }
 
+  // ─── Generic Skill Execution (for MCP) ──────────────────
+
+  async runSkill(
+    skillId: string,
+    brandId: string,
+    inputs: Record<string, unknown>,
+  ): Promise<{ output: Record<string, unknown>; tokensUsed: number; costUnits: number; modelUsed: string; durationMs: number }> {
+    const brand = getBrand(brandId);
+    if (!brand) throw new Error(\`Brand not found: \${brandId}\`);
+
+    const skill = getSkill(skillId);
+    if (!skill) throw new Error(\`Skill not found: \${skillId}\`);
+
+    const ctx = {
+      inputs,
+      brand,
+      llm: this.llm,
+      tools: this.tools,
+      memory: this.memory,
+      logger: this.logger,
+    };
+
+    const result = await skill.execute(ctx);
+
+    this.metering.trackUsage({
+      runId: \`mcp-\${Date.now()}\`,
+      stepId: skillId,
+      model: result.modelUsed,
+      tier: 'routine',
+      inputTokens: 0,
+      outputTokens: 0,
+      costUnits: result.costUnits,
+    });
+
+    return result;
+  }
+
   // ─── Cleanup ──────────────────────────────────────────────
 
   shutdown(): void {
@@ -388,3 +425,4 @@ export class Orchestrator {
     this.logger.info('Orchestrator shut down');
   }
 }
+
