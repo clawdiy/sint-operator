@@ -1,0 +1,234 @@
+# Deliverable 3: Template Brands (4)
+# Drop into config/brands/ — users can clone + customize
+
+---
+# Brand 1: SaaS Startup
+id: template-saas-startup
+name: "[Your SaaS Name]"
+voice:
+  tone:
+    - clear
+    - confident
+    - helpful
+    - slightly-informal
+  style: "Problem-solution framing. Lead with the pain point, then show the fix. Short paragraphs. Use 'you' more than 'we'. Data when available, analogies when not. Explain technical concepts without being condescending."
+  doNot:
+    - Use 'revolutionary' or 'game-changing'
+    - Say 'we're excited to announce'
+    - Start posts with 'In today's fast-paced world'
+    - Use more than 2 emoji per post
+    - Make claims without backing them up
+    - Sound like a press release
+  vocabulary:
+    - ship (not launch or release)
+    - build (not develop or engineer)
+    - users (not customers or clients)
+    - fix (not resolve or address)
+    - fast (not performant or optimized)
+  examples:
+    - "Your team spends 4 hours a week formatting reports. Ours does it in 30 seconds. Here's how."
+    - "We broke production on Friday. Here's what we learned and what we changed."
+    - "Everyone talks about AI. We'll show you what 200 users actually did with it last month."
+visual:
+  primaryColors:
+    - "#6366F1"
+    - "#FFFFFF"
+  secondaryColors:
+    - "#F59E0B"
+    - "#1E1B4B"
+  fonts:
+    - Inter
+    - Fira Code
+  watermark: false
+platforms:
+  - platform: twitter
+    handle: "@yoursaas"
+    enabled: true
+  - platform: linkedin
+    handle: "yoursaas"
+    enabled: true
+  - platform: threads
+    handle: "@yoursaas"
+    enabled: true
+keywords:
+  - SaaS
+  - productivity
+  - workflow automation
+  - team collaboration
+competitors: []
+createdAt: "2025-01-01T00:00:00Z"
+updatedAt: "2025-01-01T00:00:00Z"
+
+---
+# Brand 2: E-commerce / DTC Brand
+id: template-ecommerce-dtc
+name: "[Your Brand Name]"
+voice:
+  tone:
+    - warm
+    - aspirational
+    - genuine
+    - playful
+  style: "Lifestyle-first, product-second. Show the life your product enables, not specs. Speak like a friend who found something great, not a salesperson. Short sentences, vivid imagery. Use sensory language."
+  doNot:
+    - Use 'best-in-class' or 'premium quality'
+    - Sound like a product description page
+    - Over-explain features
+    - Use corporate language
+    - Say 'limited time offer' (ever)
+    - Use stock photo language ('woman laughing with salad')
+  vocabulary:
+    - obsessed (not interested)
+    - ritual (not routine)
+    - drop (not product launch)
+    - community (not customer base)
+    - vibe (not aesthetic)
+  examples:
+    - "Sunday morning. Coffee's perfect. You're wearing the thing. That's the vibe we design for."
+    - "We spent 14 months on a zipper. Sounds insane until you use it."
+    - "Real talk: V1 of this product wasn't great. Here's what changed."
+visual:
+  primaryColors:
+    - "#F5F0EB"
+    - "#1A1A1A"
+  secondaryColors:
+    - "#D4A574"
+    - "#2D5016"
+  fonts:
+    - Playfair Display
+    - Lato
+  watermark: false
+platforms:
+  - platform: instagram
+    handle: "@yourbrand"
+    enabled: true
+  - platform: tiktok
+    handle: "@yourbrand"
+    enabled: true
+  - platform: pinterest
+    handle: "yourbrand"
+    enabled: true
+keywords:
+  - lifestyle brand
+  - direct-to-consumer
+  - sustainable
+  - handcrafted
+competitors: []
+createdAt: "2025-01-01T00:00:00Z"
+updatedAt: "2025-01-01T00:00:00Z"
+
+---
+# Brand 3: B2B / Professional Services
+id: template-b2b-services
+name: "[Your Firm Name]"
+voice:
+  tone:
+    - authoritative
+    - measured
+    - practical
+    - credible
+  style: "Lead with insight, not credentials. Every post should teach something or challenge a common assumption. Use case studies and specific numbers over generalities. Write at a senior-manager reading level — intelligent but time-poor."
+  doNot:
+    - Say 'thought leadership' unironically
+    - Use 'synergy' or 'leverage' as verbs
+    - Start with 'As a leader in...'
+    - Name-drop without adding value
+    - Use jargon that excludes non-specialists
+    - Write paragraphs longer than 3 lines on LinkedIn
+  vocabulary:
+    - results (not deliverables)
+    - approach (not methodology or framework)
+    - team (not talent or human capital)
+    - problem (not challenge or opportunity)
+    - cost (not investment when you mean cost)
+  examples:
+    - "Our client cut onboarding time from 6 weeks to 8 days. Not with more people — with better process design."
+    - "The consulting industry has a dirty secret: most frameworks are the same framework with different colors. Here's what actually differentiates outcomes."
+    - "3 questions we ask before every engagement. If the answers are wrong, we walk away."
+visual:
+  primaryColors:
+    - "#1E293B"
+    - "#FFFFFF"
+  secondaryColors:
+    - "#0EA5E9"
+    - "#F1F5F9"
+  fonts:
+    - IBM Plex Sans
+    - IBM Plex Mono
+  watermark: false
+platforms:
+  - platform: linkedin
+    handle: "yourfirm"
+    enabled: true
+  - platform: twitter
+    handle: "@yourfirm"
+    enabled: true
+keywords:
+  - consulting
+  - business strategy
+  - digital transformation
+  - operational efficiency
+competitors: []
+createdAt: "2025-01-01T00:00:00Z"
+updatedAt: "2025-01-01T00:00:00Z"
+
+---
+# Brand 4: Creator / Personal Brand
+id: template-personal-creator
+name: "[Your Name]"
+voice:
+  tone:
+    - authentic
+    - opinionated
+    - energetic
+    - self-aware
+  style: "First person. Your experience is your content. Share what you learned, what you got wrong, what surprised you. Be specific — names, numbers, dates. Hot takes are fine if you can defend them. Vulnerability wins, but never performative vulnerability."
+  doNot:
+    - Use 'content creator' to describe yourself
+    - Start threads with 'Thread 🧵'
+    - Ask for engagement ('Like if you agree')
+    - Post motivational quotes without original commentary
+    - Use the word 'grind' or 'hustle' positively
+    - Humble-brag ('So humbled to announce...')
+  vocabulary:
+    - built (not created)
+    - learned (not discovered)
+    - failed (not pivoted, when you actually failed)
+    - made (not generated or produced)
+    - real talk (not to be honest)
+  examples:
+    - "I spent $40K on ads last year. $32K was wasted. Here's how I figured out which $8K worked."
+    - "Everyone says 'build in public.' Nobody talks about the public part where you're embarrassed."
+    - "Unpopular opinion: you don't need a personal brand. You need to be good at something and tell people about it."
+visual:
+  primaryColors:
+    - "#000000"
+    - "#FAFAFA"
+  secondaryColors:
+    - "#FF6B35"
+    - "#1A1A2E"
+  fonts:
+    - Space Grotesk
+    - JetBrains Mono
+  watermark: false
+platforms:
+  - platform: twitter
+    handle: "@yourhandle"
+    enabled: true
+  - platform: linkedin
+    handle: "yourname"
+    enabled: true
+  - platform: youtube
+    handle: "@yourhandle"
+    enabled: true
+  - platform: threads
+    handle: "@yourhandle"
+    enabled: true
+keywords:
+  - personal brand
+  - building in public
+  - entrepreneurship
+  - creator economy
+competitors: []
+createdAt: "2025-01-01T00:00:00Z"
+updatedAt: "2025-01-01T00:00:00Z"
