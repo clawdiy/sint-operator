@@ -2,195 +2,156 @@
 
 > Upload one asset → get dozens of platform-ready deliverables in 60 seconds.
 
-**An autonomous marketing operator** built on the SINT platform. Not a chatbot — a persistent background service that chains AI workflows into deterministic, auditable pipelines.
+A locally-hosted, always-on AI agent operator purpose-built for marketing teams and agencies. Built on OpenClaw + Eliza OS.
 
-## What It Does
+**Not a chatbot.** A persistent background service with deterministic YAML pipelines, brand memory, and local-first data sovereignty.
 
-| Input | Output |
-|-------|--------|
-| Blog post | → Twitter thread, LinkedIn post, IG caption, TikTok script, email newsletter |
-| Product announcement | → 7-day social calendar across all platforms |
-| Topic + keywords | → Full SEO-optimized 1500-word article with meta tags |
-| Any text content | → Platform-native formats respecting every platform's rules |
+## Target Metric
+
+A non-technical marketing manager uploads a 30-minute video and gets back **5 TikTok clips + 3 LinkedIn posts + 1 SEO blog post in under 5 minutes.**
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│          SINT MARKETING OPERATOR            │
-│                                             │
-│  ┌─────────┐  ┌──────────┐  ┌───────────┐  │
-│  │   CLI   │  │  Web API  │  │ Telegram  │  │
-│  └────┬────┘  └────┬─────┘  └─────┬─────┘  │
-│       └─────────┬──┴──────────────┘         │
-│                 │                            │
-│  ┌──────────────┴──────────────────────┐    │
-│  │     MARKETING ORCHESTRATOR          │    │
-│  │  • YAML Pipeline Engine             │    │
-│  │  • Skill Resolver                   │    │
-│  │  • Brand Context Injector           │    │
-│  │  • Asset Router                     │    │
-│  └──────┬────────────┬─────────────────┘    │
-│         │            │                      │
-│  ┌──────┴──┐  ┌──────┴──────┐               │
-│  │  Skills │  │   Services  │               │
-│  │         │  │             │               │
-│  │• Repurp │  │• OpenAI LLM │               │
-│  │• SEO    │  │• FFmpeg     │               │
-│  │• Social │  │• Sharp      │               │
-│  │• Format │  │• Puppeteer  │               │
-│  └─────────┘  └─────────────┘               │
-│                                             │
-│  ┌──────────────────────────────────────┐   │
-│  │  SQLite FTS5 + Semantic Memory       │   │
-│  └──────────────────────────────────────┘   │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                 SINT MARKETING OPERATOR                 │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐ │
+│  │   Electron   │  │   Web UI     │  │  Telegram/    │ │
+│  │   Launcher   │  │  :18789      │  │  Slack        │ │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬────────┘ │
+│         └─────────────┬───┴──────────────────┘          │
+│  ┌────────────────────┴────────────────────────────┐    │
+│  │         MARKETING ORCHESTRATOR                  │    │
+│  │  • YAML Pipeline Engine  • Model Router         │    │
+│  │  • Progressive Skills    • Brand Context        │    │
+│  │  • Security Allowlist    • Approval Gates       │    │
+│  └──────┬───────────────┬──────────────┬───────────┘    │
+│  ┌──────┴───┐  ┌────────┴────┐  ┌──────┴──────────┐    │
+│  │ OpenClaw │  │  Eliza OS   │  │ Tool Services   │    │
+│  │ Runtime  │  │  Social     │  │ FFmpeg│Whisper  │    │
+│  │ Brain    │  │  Twitter    │  │ Sharp │Playwright│   │
+│  │ Memory   │  │  LinkedIn   │  │ Canvas│Stability │   │
+│  └──────────┘  └─────────────┘  └─────────────────┘    │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │  SQLite FTS5 + ChromaDB │ Metering │ Brand Mem  │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
 ```
+
+## Pipelines
+
+| Pipeline | Trigger | What It Does |
+|----------|---------|-------------|
+| **Content Repurpose** | `repurpose\|shred` | Video/article → 5 clips + LinkedIn posts + blog + social |
+| **SEO Blog Writer** | `seo blog\|write blog` | SERP analysis → gap analysis → 1500-word article + schema |
+| **Content Calendar** | `content calendar` | Trend research → strategy → 30-day multi-platform calendar |
+| **Brand Identity** | `brand identity` | Quiz → research → colors → typography → logos → guidelines PDF |
+| **Ad Variations** | `ad variations` | Product photo → 10 headlines → 10 layouts → campaign package |
+| **Visual Metadata** | `tag images` | Batch images → alt-text + filenames + SEO tags |
+| **Infographic** | `infographic` | Data → visual metaphors → branded infographic |
+
+## Skills (12 Built-in)
+
+| Skill | Tier | Cost | Description |
+|-------|------|------|-------------|
+| `asset-ingester` | — | 5 | Video/audio/URL/doc intake + Whisper transcription |
+| `content-analyzer` | Routine | 10 | Themes, hooks, data points, platform suitability |
+| `content-repurpose` | Complex | 15 | Multi-platform content generation from content map |
+| `video-clipper` | — | 20 | Extract clips, burn captions, watermark, 9:16 export |
+| `linkedin-writer` | Routine | 8 | LinkedIn posts with hooks/insights/CTAs |
+| `seo-blog` | Complex | 20 | Full SEO article with outline + writing |
+| `serp-scraper` | Routine | 5 | Google SERP analysis + content gap identification |
+| `seo-optimizer` | Routine | 5 | Schema markup, meta tags, keyword density, scorecard |
+| `social-calendar` | Complex | 15 | Multi-day content calendar with strategy |
+| `brand-researcher` | Complex | 15 | Industry trends, competitor analysis, color theory |
+| `output-packager` | — | 2 | Organize deliverables into structured folders |
+| `platform-formatter` | Routine | 3 | Format to exact platform specs |
+
+## Model Routing
+
+| Task Type | Model | Use Case |
+|-----------|-------|----------|
+| Complex | Claude Opus 4.6 | Strategy, analysis, long-form writing |
+| Routine | Claude Sonnet 4.5 | Formatting, captions, simple generation |
+| Batch | Claude Haiku 4.5 | Image analysis, data extraction |
+| Fallback | Kimi-K2.5 | Rate limit overflow |
 
 ## Quick Start
 
 ```bash
-# Clone
 git clone https://github.com/clawdiy/sint-operator.git
 cd sint-operator
-
-# Install
 npm install
-
-# Configure
-cp .env.example .env
-# Edit .env with your OpenAI API key
-
-# Run
+cp .env.example .env  # Add your API key
 npm run dev
 ```
 
-API starts at `http://localhost:18789`
+## Docker
 
-## API Endpoints
-
-### Quick Actions
 ```bash
-# Repurpose content across platforms
-curl -X POST http://localhost:18789/api/repurpose \
-  -H "Content-Type: application/json" \
-  -d '{
-    "brandId": "sint-brand",
-    "content": "Your content here...",
-    "platforms": ["twitter", "linkedin", "instagram"]
-  }'
-
-# Generate SEO blog post
-curl -X POST http://localhost:18789/api/blog \
-  -H "Content-Type: application/json" \
-  -d '{
-    "brandId": "sint-brand",
-    "topic": "Why autonomous AI operators beat chatbots",
-    "keywords": ["AI operators", "business automation"]
-  }'
-
-# Generate social calendar
-curl -X POST http://localhost:18789/api/calendar \
-  -H "Content-Type: application/json" \
-  -d '{
-    "brandId": "sint-brand",
-    "days": 7,
-    "themes": ["product launch", "thought leadership", "community"]
-  }'
+cp .env.example .env
+docker-compose up -d
 ```
 
-### Management
-```bash
-GET  /api/brands          # List brands
-POST /api/brands          # Create brand
-GET  /api/pipelines       # List pipelines
-GET  /api/runs            # List pipeline runs
-POST /api/assets/upload   # Upload asset
-```
-
-## CLI
+## API
 
 ```bash
 # Repurpose content
-npm run pipeline -- repurpose -b sint-brand -p twitter,linkedin -t "Your content"
+POST /api/repurpose { brandId, content, platforms }
 
 # Generate blog
-npm run pipeline -- blog -b sint-brand -t "Topic" -k "keyword1,keyword2"
+POST /api/blog { brandId, topic, keywords }
 
 # Generate calendar
-npm run pipeline -- calendar -b sint-brand -d 7 -t "theme1,theme2"
+POST /api/calendar { brandId, days, themes }
 
-# List brands
-npm run pipeline -- brands
+# Run any pipeline
+POST /api/pipelines/:id/run { brandId, inputs }
 
-# List pipelines
-npm run pipeline -- pipelines
+# Usage & metering
+GET  /api/usage
+POST /api/usage/limits { daily, monthly, perRun }
+
+# Discovery
+GET  /api/skills
+GET  /api/brands
+GET  /api/pipelines
 ```
 
-## Brand Configuration
+## Security
 
-Create a YAML file in `config/brands/`:
+- **Command Allowlist**: Only approved executables
+- **Network Allowlist**: Only approved API endpoints
+- **Approval Gates**: Publishing requires human OK
+- **Docker Sandbox**: Isolated execution, no host access
+- **Metering**: Daily/monthly cost limits with hard stops
 
-```yaml
-id: my-brand
-name: My Company
-voice:
-  tone: [professional, innovative, bold]
-  style: "Direct and authoritative..."
-  doNot: ["Use corporate buzzwords"]
-  vocabulary: ["our preferred terms"]
-  examples: ["Example post in our voice"]
-visual:
-  primaryColors: ["#000000"]
-  fonts: ["Inter"]
-platforms:
-  - platform: twitter
-    handle: "@mycompany"
-    enabled: true
-keywords: ["target keyword 1"]
-competitors: ["Competitor A"]
+## Brand Memory
+
+```
+/memory/brands/<brand-id>/
+  brand-profile.json
+  color-palette.json
+  typography.json
+  voice-examples/
+    linkedin-approved.md
+    twitter-approved.md
+  assets/
+    logo-primary.svg
+  history/
+    2026-02-content-calendar.csv
 ```
 
-## Custom Pipelines
+Approved content is embedded in ChromaDB for semantic search. New generations retrieve the 5 most similar approved pieces to maintain voice consistency.
 
-Define YAML pipelines in `config/pipelines/`:
+## Competitive Moat
 
-```yaml
-id: my-pipeline
-name: My Custom Pipeline
-steps:
-  - id: step1
-    skill: content-repurpose
-    inputs:
-      text: "${inputs.text}"
-      target_platforms: "${inputs.platforms}"
-```
-
-## Skills
-
-| Skill | Description |
-|-------|-------------|
-| `content-repurpose` | One input → multi-platform outputs |
-| `seo-blog` | Full SEO article with metadata |
-| `social-calendar` | Multi-day content calendar |
-| `platform-formatter` | Format to exact platform specs |
-
-## Stack
-
-- **Runtime:** Node.js 22+ / TypeScript
-- **LLM:** OpenAI-compatible (GPT-4o, Claude, local models)
-- **Memory:** SQLite FTS5 + cosine similarity vectors
-- **Media:** FFmpeg, Sharp, Puppeteer
-- **API:** Express.js
-
-## Why Not Just Use ChatGPT?
-
-Because this isn't a chatbot. It's a **persistent background service** with:
-- Long-running workflows that chain 5-15 AI steps
-- Platform-specific output formatting (TikTok ≠ LinkedIn ≠ Blog SEO)
-- Brand memory that persists across every generation
-- Deterministic YAML pipelines that produce auditable, repeatable results
-- Local-first data sovereignty — client assets never leave your machine
+The moat is **methodology, not connectivity**:
+- Any agent can connect to Twitter via MCP
+- Only SINT has pre-built marketing pipelines encoding best practices
+- Brand memory ensures consistency one-off prompting can never achieve
+- Progressive disclosure = 10x less token burn than competitors
 
 ---
 
