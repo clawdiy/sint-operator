@@ -13,7 +13,7 @@ import type { ModelConfig } from './core/types.js';
 
 const DATA_DIR = resolve(process.env.SINT_DATA_DIR ?? './data');
 const CONFIG_DIR = resolve(process.env.SINT_CONFIG_DIR ?? './config');
-const PORT = parseInt(process.env.SINT_PORT ?? '18789', 10);
+const PORT = parseInt(process.env.PORT ?? process.env.SINT_PORT ?? '18789', 10);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
 
