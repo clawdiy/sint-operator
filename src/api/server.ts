@@ -23,7 +23,7 @@ import type { Orchestrator } from '../orchestrator/index.js';
 
 interface AsyncRun {
   id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   pipelineId: string;
   brandId: string;
   startedAt: string;
@@ -33,9 +33,119 @@ interface AsyncRun {
 }
 
 const asyncRuns = new Map<string, AsyncRun>();
+const ASYNC_RUN_RETENTION_MS = 24 * 60 * 60 * 1000;
+const ASYNC_RUN_MAX_ENTRIES = 500;
 
 function generateRunId(): string {
   return `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function isTerminalStatus(status: AsyncRun['status']): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled';
+}
+
+function toTimestamp(value: unknown): number {
+  if (typeof value !== 'string') return 0;
+  const ts = Date.parse(value);
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
+function parseLimitParam(raw: unknown, fallback: number = 100): number {
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, 250);
+}
+
+function parseStringQuery(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function cleanupAsyncRuns(nowTs: number = Date.now()): void {
+  for (const run of asyncRuns.values()) {
+    if (!isTerminalStatus(run.status)) continue;
+    const doneTs = toTimestamp(run.completedAt ?? run.startedAt);
+    if (doneTs > 0 && nowTs - doneTs > ASYNC_RUN_RETENTION_MS) {
+      asyncRuns.delete(run.id);
+    }
+  }
+
+  if (asyncRuns.size <= ASYNC_RUN_MAX_ENTRIES) return;
+
+  const terminalRuns = Array.from(asyncRuns.values())
+    .filter(run => isTerminalStatus(run.status))
+    .sort((a, b) => toTimestamp(a.completedAt ?? a.startedAt) - toTimestamp(b.completedAt ?? b.startedAt));
+
+  for (const run of terminalRuns) {
+    if (asyncRuns.size <= ASYNC_RUN_MAX_ENTRIES) break;
+    asyncRuns.delete(run.id);
+  }
+}
+
+function toAsyncRunResponse(run: AsyncRun): Record<string, unknown> {
+  const nested = isObjectRecord(run.result) ? run.result : null;
+  const response: Record<string, unknown> = {
+    id: run.id,
+    pipelineId: run.pipelineId || (typeof nested?.pipelineId === 'string' ? nested.pipelineId : 'unknown'),
+    brandId: run.brandId || (typeof nested?.brandId === 'string' ? nested.brandId : 'unknown'),
+    status: run.status,
+    startedAt: run.startedAt || (typeof nested?.startedAt === 'string' ? nested.startedAt : new Date().toISOString()),
+    completedAt: run.completedAt ?? (typeof nested?.completedAt === 'string' ? nested.completedAt : undefined),
+    error: run.error ?? (typeof nested?.error === 'string' ? nested.error : undefined),
+  };
+
+  if (Array.isArray(nested?.outputs)) response.outputs = nested.outputs;
+  if (Array.isArray(nested?.steps)) response.steps = nested.steps;
+  if (isObjectRecord(nested?.metering)) response.metering = nested.metering;
+  if (run.result !== undefined) response.result = run.result;
+
+  return response;
+}
+
+function enqueueAsyncRun(
+  pipelineId: string,
+  brandId: string,
+  execute: () => Promise<unknown>,
+): AsyncRun {
+  cleanupAsyncRuns();
+
+  const asyncRun: AsyncRun = {
+    id: generateRunId(),
+    status: 'queued',
+    pipelineId,
+    brandId,
+    startedAt: new Date().toISOString(),
+  };
+
+  asyncRuns.set(asyncRun.id, asyncRun);
+
+  queueMicrotask(() => {
+    if (asyncRun.status === 'cancelled') return;
+    asyncRun.status = 'running';
+
+    void execute()
+      .then(result => {
+        if (asyncRun.status === 'cancelled') return;
+        asyncRun.status = 'completed';
+        asyncRun.completedAt = new Date().toISOString();
+        asyncRun.result = result;
+        cleanupAsyncRuns();
+      })
+      .catch(err => {
+        if (asyncRun.status === 'cancelled') return;
+        asyncRun.status = 'failed';
+        asyncRun.completedAt = new Date().toISOString();
+        asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
+        cleanupAsyncRuns();
+      });
+  });
+
+  return asyncRun;
 }
 
 export function createServer(orchestrator: Orchestrator, port: number = 18789) {
@@ -116,34 +226,18 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     try {
       const { brandId, inputs } = req.body;
       if (!brandId) return res.status(400).json({ error: 'brandId required' });
+      if (!orchestrator.getPipeline(req.params.id)) {
+        return res.status(404).json({ error: 'Pipeline not found' });
+      }
 
-      // Async execution: return run ID immediately
-      const runId = generateRunId();
-      const asyncRun: AsyncRun = {
-        id: runId,
-        status: 'queued',
-        pipelineId: req.params.id,
+      const asyncRun = enqueueAsyncRun(
+        req.params.id,
         brandId,
-        startedAt: new Date().toISOString(),
-      };
-      asyncRuns.set(runId, asyncRun);
+        () => orchestrator.runPipeline(req.params.id, brandId, inputs ?? {}),
+      );
 
       // Return immediately
-      res.json({ runId, status: 'queued', message: 'Pipeline execution started. Poll GET /api/runs/:id for status.' });
-
-      // Execute async
-      asyncRun.status = 'running';
-      orchestrator.runPipeline(req.params.id, brandId, inputs ?? {})
-        .then(result => {
-          asyncRun.status = 'completed';
-          asyncRun.completedAt = new Date().toISOString();
-          asyncRun.result = result;
-        })
-        .catch(err => {
-          asyncRun.status = 'failed';
-          asyncRun.completedAt = new Date().toISOString();
-          asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
-        });
+      res.json({ runId: asyncRun.id, status: asyncRun.status, message: 'Pipeline execution started. Poll GET /api/runs/:id for status.' });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
@@ -154,35 +248,21 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   app.post('/api/repurpose', async (req, res) => {
     try {
       const { brandId, content, platforms } = req.body;
-      if (!brandId || !content || !platforms) {
+      const parsedPlatforms = Array.isArray(platforms)
+        ? platforms.filter((p: unknown): p is string => typeof p === 'string' && p.trim().length > 0)
+        : [];
+      if (!brandId || !content || parsedPlatforms.length === 0) {
         return res.status(400).json({ error: 'brandId, content, and platforms required' });
       }
 
-      const runId = generateRunId();
-      const asyncRun: AsyncRun = {
-        id: runId,
-        status: 'running',
-        pipelineId: 'content-repurpose',
+      const asyncRun = enqueueAsyncRun(
+        'content-repurpose',
         brandId,
-        startedAt: new Date().toISOString(),
-      };
-      asyncRuns.set(runId, asyncRun);
+        () => orchestrator.repurposeContent(brandId, content, parsedPlatforms),
+      );
 
       // Return immediately with run ID
-      res.json({ runId, status: 'running', message: 'Content repurpose started. Poll GET /api/runs/:id for results.' });
-
-      // Execute async
-      orchestrator.repurposeContent(brandId, content, platforms)
-        .then(result => {
-          asyncRun.status = 'completed';
-          asyncRun.completedAt = new Date().toISOString();
-          asyncRun.result = result;
-        })
-        .catch(err => {
-          asyncRun.status = 'failed';
-          asyncRun.completedAt = new Date().toISOString();
-          asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
-        });
+      res.json({ runId: asyncRun.id, status: asyncRun.status, message: 'Content repurpose started. Poll GET /api/runs/:id for results.' });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
@@ -194,30 +274,17 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
       if (!brandId || !topic) {
         return res.status(400).json({ error: 'brandId and topic required' });
       }
+      const parsedKeywords = Array.isArray(keywords)
+        ? keywords.filter((k: unknown): k is string => typeof k === 'string' && k.trim().length > 0)
+        : [];
 
-      const runId = generateRunId();
-      const asyncRun: AsyncRun = {
-        id: runId,
-        status: 'running',
-        pipelineId: 'seo-blog',
+      const asyncRun = enqueueAsyncRun(
+        'seo-blog',
         brandId,
-        startedAt: new Date().toISOString(),
-      };
-      asyncRuns.set(runId, asyncRun);
+        () => orchestrator.generateBlogPost(brandId, topic, parsedKeywords),
+      );
 
-      res.json({ runId, status: 'running', message: 'Blog generation started. Poll GET /api/runs/:id for results.' });
-
-      orchestrator.generateBlogPost(brandId, topic, keywords ?? [])
-        .then(result => {
-          asyncRun.status = 'completed';
-          asyncRun.completedAt = new Date().toISOString();
-          asyncRun.result = result;
-        })
-        .catch(err => {
-          asyncRun.status = 'failed';
-          asyncRun.completedAt = new Date().toISOString();
-          asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
-        });
+      res.json({ runId: asyncRun.id, status: asyncRun.status, message: 'Blog generation started. Poll GET /api/runs/:id for results.' });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
@@ -226,33 +293,21 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   app.post('/api/calendar', async (req, res) => {
     try {
       const { brandId, days, themes } = req.body;
-      if (!brandId || !days) {
+      const parsedDays = Number(days);
+      if (!brandId || !Number.isFinite(parsedDays) || parsedDays <= 0) {
         return res.status(400).json({ error: 'brandId and days required' });
       }
+      const parsedThemes = Array.isArray(themes)
+        ? themes.filter((t: unknown): t is string => typeof t === 'string' && t.trim().length > 0)
+        : [];
 
-      const runId = generateRunId();
-      const asyncRun: AsyncRun = {
-        id: runId,
-        status: 'running',
-        pipelineId: 'social-calendar',
+      const asyncRun = enqueueAsyncRun(
+        'social-calendar',
         brandId,
-        startedAt: new Date().toISOString(),
-      };
-      asyncRuns.set(runId, asyncRun);
+        () => orchestrator.generateSocialCalendar(brandId, parsedDays, parsedThemes),
+      );
 
-      res.json({ runId, status: 'running', message: 'Calendar generation started. Poll GET /api/runs/:id for results.' });
-
-      orchestrator.generateSocialCalendar(brandId, days, themes ?? [])
-        .then(result => {
-          asyncRun.status = 'completed';
-          asyncRun.completedAt = new Date().toISOString();
-          asyncRun.result = result;
-        })
-        .catch(err => {
-          asyncRun.status = 'failed';
-          asyncRun.completedAt = new Date().toISOString();
-          asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
-        });
+      res.json({ runId: asyncRun.id, status: asyncRun.status, message: 'Calendar generation started. Poll GET /api/runs/:id for results.' });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
@@ -303,42 +358,75 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   // ─── Runs (both engine runs and async API runs) ─────────
 
-  app.get('/api/runs', (_req, res) => {
-    // Combine engine runs with async runs
-    const engineRuns = orchestrator.listRuns();
-    const apiRuns = Array.from(asyncRuns.values()).map(ar => ({
-      id: ar.id,
-      pipelineId: ar.pipelineId,
-      brandId: ar.brandId,
-      status: ar.status,
-      startedAt: ar.startedAt,
-      completedAt: ar.completedAt,
-      error: ar.error,
-      ...(ar.result ? { result: ar.result } : {}),
-    }));
-    res.json([...engineRuns, ...apiRuns]);
+  app.get('/api/runs', (req, res) => {
+    cleanupAsyncRuns();
+
+    const wrappedEngineRunIds = new Set<string>();
+    for (const run of asyncRuns.values()) {
+      if (!isObjectRecord(run.result)) continue;
+      if (typeof run.result.id === 'string') {
+        wrappedEngineRunIds.add(run.result.id);
+      }
+    }
+
+    const apiRuns = Array.from(asyncRuns.values()).map(toAsyncRunResponse);
+    const engineRuns = orchestrator.listRuns().filter(run => !wrappedEngineRunIds.has(run.id));
+
+    const statusFilter = parseStringQuery(req.query.status)?.toLowerCase();
+    const pipelineFilter = parseStringQuery(req.query.pipelineId)?.toLowerCase();
+    const brandFilter = parseStringQuery(req.query.brandId)?.toLowerCase();
+
+    const combined = [...apiRuns, ...engineRuns]
+      .filter(run => {
+        const runStatus = String((run as { status?: unknown }).status ?? '').toLowerCase();
+        const runPipelineId = String((run as { pipelineId?: unknown }).pipelineId ?? '').toLowerCase();
+        const runBrandId = String((run as { brandId?: unknown }).brandId ?? '').toLowerCase();
+
+        if (statusFilter && runStatus !== statusFilter) return false;
+        if (pipelineFilter && !runPipelineId.includes(pipelineFilter)) return false;
+        if (brandFilter && !runBrandId.includes(brandFilter)) return false;
+        return true;
+      })
+      .sort((a, b) => toTimestamp(b.startedAt) - toTimestamp(a.startedAt));
+
+    const limit = parseLimitParam(req.query.limit, 100);
+    res.json(combined.slice(0, limit));
   });
 
   app.get('/api/runs/:id', (req, res) => {
+    cleanupAsyncRuns();
+
     // Check async runs first
     const asyncRun = asyncRuns.get(req.params.id);
     if (asyncRun) {
-      return res.json({
-        id: asyncRun.id,
-        pipelineId: asyncRun.pipelineId,
-        brandId: asyncRun.brandId,
-        status: asyncRun.status,
-        startedAt: asyncRun.startedAt,
-        completedAt: asyncRun.completedAt,
-        error: asyncRun.error,
-        ...(asyncRun.result ? { result: asyncRun.result } : {}),
-      });
+      return res.json(toAsyncRunResponse(asyncRun));
     }
 
     // Check engine runs
     const run = orchestrator.getRun(req.params.id);
     if (!run) return res.status(404).json({ error: 'Run not found' });
     res.json(run);
+  });
+
+  app.post('/api/runs/:id/cancel', (req, res) => {
+    cleanupAsyncRuns();
+
+    const run = asyncRuns.get(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Run not found or not cancelable' });
+
+    if (isTerminalStatus(run.status)) {
+      return res.status(409).json({ error: `Run is already ${run.status}` });
+    }
+
+    run.status = 'cancelled';
+    run.completedAt = new Date().toISOString();
+    run.error = 'Cancelled by user';
+
+    res.json({
+      status: 'ok',
+      message: 'Cancellation requested. Running task will be ignored when it finishes.',
+      run: toAsyncRunResponse(run),
+    });
   });
 
   // ─── Metering ───────────────────────────────────────────
@@ -399,6 +487,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     console.log(`   Blog:      POST /api/blog`);
     console.log(`   Calendar:  POST /api/calendar`);
     console.log(`   Run Poll:  GET  /api/runs/:id\n`);
+    console.log(`   Run Cancel: POST /api/runs/:id/cancel\n`);
   });
 
   return { app, server };

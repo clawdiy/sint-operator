@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { getRuns, getRun } from '../api';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { getRuns, getRun, normalizeRunPayload, isRunInProgress, cancelRun } from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
 
@@ -20,16 +20,53 @@ export default function Results() {
   const [selected, setSelected] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('');
   const [copiedId, setCopiedId] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [canceling, setCanceling] = useState(false);
+
+  const refreshRuns = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const incoming = await getRuns({ limit: 250 });
+      const normalizedRuns = Array.isArray(incoming)
+        ? incoming.map(normalizeRunPayload).sort((a, b) => Date.parse(b.startedAt ?? '') - Date.parse(a.startedAt ?? ''))
+        : [];
+      setRuns(normalizedRuns);
+
+      setSelected(prev => {
+        if (prev?.id) {
+          const matched = normalizedRuns.find(run => run.id === prev.id);
+          if (matched) return matched;
+        }
+        return normalizedRuns[0] ?? null;
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  const filteredRuns = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return runs.filter(run => {
+      if (statusFilter !== 'all' && run.status !== statusFilter) return false;
+      if (!q) return true;
+      const haystack = `${run.pipelineId ?? ''} ${run.brandId ?? ''} ${run.id ?? ''}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [runs, statusFilter, searchQuery]);
 
   useEffect(() => {
-    getRuns()
-      .then(r => { setRuns(Array.isArray(r) ? r : []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
+    void refreshRuns()
+      .catch(() => {
+        addToast('error', 'Failed to load runs');
+      })
+      .finally(() => setLoading(false));
+  }, [addToast, refreshRuns]);
 
   const viewRun = async (id: string) => {
     try {
-      const run = await getRun(id);
+      const run = normalizeRunPayload(await getRun(id));
       setSelected(run);
       if (run.outputs && run.outputs.length > 0) {
         setActiveTab(run.outputs[0].platform || 'all');
@@ -38,6 +75,22 @@ export default function Results() {
       addToast('error', 'Failed to load run details');
     }
   };
+
+  useEffect(() => {
+    if (!runs.some(run => isRunInProgress(run.status))) return;
+
+    const timer = setInterval(async () => {
+      try {
+        await refreshRuns();
+      } catch {
+        // Ignore transient polling failures
+      }
+    }, 2000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [runs, refreshRuns]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -94,6 +147,21 @@ export default function Results() {
     addToast('success', 'Exported as JSON');
   };
 
+  const handleCancelSelectedRun = async () => {
+    if (!selected?.id || !isRunInProgress(selected.status)) return;
+    setCanceling(true);
+    try {
+      const updated = await cancelRun(selected.id);
+      setSelected(updated);
+      setRuns(prev => prev.map(run => run.id === updated.id ? updated : run));
+      addToast('success', 'Run cancelled');
+    } catch (err: any) {
+      addToast('error', err.message || 'Failed to cancel run');
+    } finally {
+      setCanceling(false);
+    }
+  };
+
   if (loading) return <Spinner text="Loading results..." />;
 
   return (
@@ -104,16 +172,44 @@ export default function Results() {
       <div className="two-col">
         {/* Run List */}
         <div className="card">
-          <h3>Pipeline Runs</h3>
+          <div className="live-activity-header">
+            <h3 style={{ margin: 0 }}>Pipeline Runs</h3>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn small" onClick={() => void refreshRuns()} disabled={refreshing}>
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+          <div className="toolbar" style={{ marginBottom: '12px' }}>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="queued">Queued</option>
+              <option value="running">Running</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <input
+              placeholder="Search by pipeline, brand, or run id..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
           {runs.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📋</div>
               <div className="empty-title">No runs yet</div>
               <div className="empty-desc">Run a pipeline from the Dashboard to see results here.</div>
             </div>
+          ) : filteredRuns.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">🔎</div>
+              <div className="empty-title">No runs match filters</div>
+              <div className="empty-desc">Try changing status filter or search text.</div>
+            </div>
           ) : (
             <ul className="pipeline-list">
-              {runs.map(r => (
+              {filteredRuns.map(r => (
                 <li
                   key={r.id}
                   className={`pipeline-item ${selected?.id === r.id ? 'active' : ''}`}
@@ -137,12 +233,25 @@ export default function Results() {
         <div className="card">
           {selected ? (
             <>
-              <h3>Run: {selected.id?.slice(0, 8)}</h3>
+              <div className="live-activity-header" style={{ marginBottom: '10px' }}>
+                <h3 style={{ margin: 0 }}>Run: {selected.id?.slice(0, 8)}</h3>
+                {isRunInProgress(selected.status) && (
+                  <button className="btn danger small" onClick={handleCancelSelectedRun} disabled={canceling}>
+                    {canceling ? 'Canceling…' : 'Cancel Run'}
+                  </button>
+                )}
+              </div>
               <div className="meta-row">
                 <span>Pipeline: <strong>{selected.pipelineId}</strong></span>
                 <span>Brand: <strong>{selected.brandId}</strong></span>
                 <span>Status: <span className={`badge badge-${selected.status}`}><span className="badge-dot" />{selected.status}</span></span>
               </div>
+
+              {selected.status === 'failed' && selected.error && (
+                <div className="alert error" style={{ marginBottom: '16px' }}>
+                  {selected.error}
+                </div>
+              )}
 
               {/* Export Bar */}
               {selected.outputs && selected.outputs.length > 0 && (
@@ -154,9 +263,11 @@ export default function Results() {
               )}
 
               {/* Running progress */}
-              {selected.status === 'running' && (
+              {isRunInProgress(selected.status) && (
                 <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Pipeline running...</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Pipeline {selected.status}...
+                  </div>
                   <div className="progress-bar"><div className="progress-bar-fill" /></div>
                 </div>
               )}

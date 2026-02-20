@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPipelines, getBrands, runPipeline } from '../api';
+import { getPipelines, getBrands, runPipelineAndWait } from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
 
@@ -42,6 +42,7 @@ export default function Pipelines() {
   const [brandId, setBrandId] = useState('');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [running, setRunning] = useState(false);
+  const [runStatus, setRunStatus] = useState('');
   const [result, setResult] = useState<any>(null);
   const [copiedResult, setCopiedResult] = useState(false);
 
@@ -61,6 +62,7 @@ export default function Pipelines() {
   const selectPipeline = (p: Pipeline) => {
     setSelected(p);
     setResult(null);
+    setRunStatus('');
     const defaults: Record<string, string> = {};
     p.inputs.forEach(inp => {
       if (inp.default !== undefined && inp.default !== null) {
@@ -76,23 +78,77 @@ export default function Pipelines() {
       return;
     }
     setRunning(true);
+    setRunStatus('queued');
     setResult(null);
     try {
       const parsedInputs: Record<string, unknown> = {};
+      const missingRequired: string[] = [];
+
       for (const [key, val] of Object.entries(inputs)) {
         const input = selected.inputs.find(i => i.name === key);
-        if (input?.type === 'number') parsedInputs[key] = Number(val);
-        else if (input?.type === 'boolean') parsedInputs[key] = val === 'true';
-        else if (input?.type === 'array') parsedInputs[key] = val.split(',').map(s => s.trim());
-        else parsedInputs[key] = val;
+        if (!input) continue;
+
+        if (input.required && !String(val ?? '').trim()) {
+          missingRequired.push(input.name);
+          continue;
+        }
+
+        if (input.type === 'number') {
+          const parsed = Number(val);
+          if (Number.isNaN(parsed)) {
+            addToast('error', `Input "${input.name}" must be a valid number`);
+            setRunning(false);
+            setRunStatus('');
+            return;
+          }
+          parsedInputs[key] = parsed;
+        } else if (input.type === 'boolean') {
+          parsedInputs[key] = val === 'true';
+        } else if (input.type === 'array') {
+          const values = val.split(',').map(s => s.trim()).filter(Boolean);
+          if (input.required && values.length === 0) {
+            missingRequired.push(input.name);
+            continue;
+          }
+          parsedInputs[key] = values;
+        } else {
+          parsedInputs[key] = val;
+        }
       }
-      const res = await runPipeline(selected.id, brandId, parsedInputs);
+
+      if (missingRequired.length > 0) {
+        addToast('error', `Missing required inputs: ${missingRequired.join(', ')}`);
+        setRunning(false);
+        setRunStatus('');
+        return;
+      }
+
+      for (const input of selected.inputs) {
+        if (input.required && inputs[input.name] === undefined) {
+          if (input.type === 'boolean') {
+            parsedInputs[input.name] = false;
+            continue;
+          }
+          missingRequired.push(input.name);
+        }
+      }
+      if (missingRequired.length > 0) {
+        addToast('error', `Missing required inputs: ${missingRequired.join(', ')}`);
+        setRunning(false);
+        setRunStatus('');
+        return;
+      }
+
+      const res = await runPipelineAndWait(selected.id, brandId, parsedInputs, {
+        onStatus: status => setRunStatus(status),
+      });
       setResult(res);
       addToast('success', `Pipeline "${selected.name}" completed!`);
     } catch (err: any) {
       addToast('error', err.message || 'Pipeline execution failed');
     } finally {
       setRunning(false);
+      setRunStatus('');
     }
   };
 
@@ -102,6 +158,11 @@ export default function Pipelines() {
 
   const isPlatformInput = (inp: Pipeline['inputs'][0]) => {
     return inp.name.toLowerCase().includes('platform');
+  };
+
+  const isLongTextInput = (inp: Pipeline['inputs'][0]) => {
+    const key = inp.name.toLowerCase();
+    return inp.type === 'text' || key.includes('content') || key.includes('text') || key.includes('article') || key.includes('body');
   };
 
   if (loading) return <Spinner text="Loading pipelines..." />;
@@ -206,6 +267,13 @@ export default function Pipelines() {
                     value={inputs[inp.name] ?? ''}
                     onChange={e => setInputs({ ...inputs, [inp.name]: e.target.value })}
                   />
+                ) : isLongTextInput(inp) ? (
+                  <textarea
+                    placeholder={inp.description || inp.name}
+                    value={inputs[inp.name] ?? ''}
+                    onChange={e => setInputs({ ...inputs, [inp.name]: e.target.value })}
+                    style={{ minHeight: '96px' }}
+                  />
                 ) : (
                   <input
                     type="text"
@@ -223,12 +291,14 @@ export default function Pipelines() {
               disabled={running}
               style={{ width: '100%', padding: '14px 20px', fontSize: '15px' }}
             >
-              {running ? 'Running...' : '▶ Run Pipeline'}
+              {running ? `Running (${runStatus || 'starting'})...` : '▶ Run Pipeline'}
             </button>
 
             {running && (
               <div style={{ marginTop: '12px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Executing pipeline steps...</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  Executing pipeline... current status: <strong>{runStatus || 'starting'}</strong>
+                </div>
                 <div className="progress-bar"><div className="progress-bar-fill" /></div>
               </div>
             )}

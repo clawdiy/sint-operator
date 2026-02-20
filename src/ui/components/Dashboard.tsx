@@ -1,5 +1,17 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { getHealth, getRuns, getUsage, getBrands, repurposeContent, generateBlog, generateCalendar } from '../api';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  getHealth,
+  getRuns,
+  getUsage,
+  getBrands,
+  repurposeContent,
+  generateBlog,
+  generateCalendar,
+  cancelRun,
+  normalizeRunPayload,
+  isAsyncRunStart,
+  isRunInProgress,
+} from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
 
@@ -17,6 +29,10 @@ const PLATFORMS = [
   { id: 'threads', label: 'Threads', icon: '🧵' },
   { id: 'tiktok', label: 'TikTok', icon: '🎵' },
 ];
+
+function sortRunsByStartedAt(runs: any[]): any[] {
+  return [...runs].sort((a, b) => Date.parse(b.startedAt ?? '') - Date.parse(a.startedAt ?? ''));
+}
 
 export default function Dashboard({ onNavigate }: Props) {
   const { addToast } = useToast();
@@ -41,6 +57,8 @@ export default function Dashboard({ onNavigate }: Props) {
   const [calThemes, setCalThemes] = useState('');
   const [calBrand, setCalBrand] = useState('');
   const [calLoading, setCalLoading] = useState(false);
+  const [refreshingRuns, setRefreshingRuns] = useState(false);
+  const [cancelingRunId, setCancelingRunId] = useState('');
 
   const loadData = useCallback(() => {
     Promise.all([
@@ -50,7 +68,8 @@ export default function Dashboard({ onNavigate }: Props) {
       getBrands().catch(() => []),
     ]).then(([h, r, u, b]) => {
       setHealth(h);
-      setRuns(Array.isArray(r) ? r.slice(0, 8) : []);
+      const normalizedRuns = Array.isArray(r) ? sortRunsByStartedAt(r.map(normalizeRunPayload)) : [];
+      setRuns(normalizedRuns);
       setUsage(u);
       const brandArr = Array.isArray(b) ? b : [];
       setBrands(brandArr);
@@ -63,6 +82,33 @@ export default function Dashboard({ onNavigate }: Props) {
       setLoading(false);
     });
   }, []);
+
+  const hasBrands = brands.length > 0;
+  const inProgressRuns = useMemo(() => runs.filter(run => isRunInProgress(run.status)), [runs]);
+  const recentRuns = useMemo(() => runs.slice(0, 8), [runs]);
+
+  const refreshRunsAndUsage = useCallback(async () => {
+    setRefreshingRuns(true);
+    try {
+      const [nextRuns, nextUsage] = await Promise.all([
+        getRuns().catch(() => []),
+        getUsage(1).catch(() => null),
+      ]);
+      const normalizedRuns = Array.isArray(nextRuns) ? sortRunsByStartedAt(nextRuns.map(normalizeRunPayload)) : [];
+      setRuns(normalizedRuns);
+      setUsage(nextUsage);
+    } finally {
+      setRefreshingRuns(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (inProgressRuns.length === 0) return;
+    const timer = setInterval(() => {
+      void refreshRunsAndUsage();
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [inProgressRuns.length, refreshRunsAndUsage]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -79,8 +125,12 @@ export default function Dashboard({ onNavigate }: Props) {
     }
     setRepurposeLoading(true);
     try {
-      await repurposeContent(repurposeBrand, repurposeText, repurposePlatforms);
-      addToast('success', 'Content repurposing started! Check Results for output.');
+      const started = await repurposeContent(repurposeBrand, repurposeText, repurposePlatforms);
+      if (isAsyncRunStart(started)) {
+        addToast('info', `Repurpose queued (${started.runId.slice(-6)}). Tracking in Live Activity.`);
+      } else {
+        addToast('success', 'Content repurposing started.');
+      }
       setRepurposeText('');
       loadData();
     } catch (err: any) {
@@ -98,8 +148,12 @@ export default function Dashboard({ onNavigate }: Props) {
     setBlogLoading(true);
     try {
       const kw = blogKeywords.split(',').map(s => s.trim()).filter(Boolean);
-      await generateBlog(blogBrand, blogTopic, kw);
-      addToast('success', 'Blog generation started! Check Results for output.');
+      const started = await generateBlog(blogBrand, blogTopic, kw);
+      if (isAsyncRunStart(started)) {
+        addToast('info', `Blog queued (${started.runId.slice(-6)}). Tracking in Live Activity.`);
+      } else {
+        addToast('success', 'Blog generation started.');
+      }
       setBlogTopic('');
       setBlogKeywords('');
       loadData();
@@ -118,14 +172,32 @@ export default function Dashboard({ onNavigate }: Props) {
     setCalLoading(true);
     try {
       const themes = calThemes.split(',').map(s => s.trim()).filter(Boolean);
-      await generateCalendar(calBrand, calDays, themes);
-      addToast('success', 'Calendar generation started! Check Results for output.');
+      const started = await generateCalendar(calBrand, calDays, themes);
+      if (isAsyncRunStart(started)) {
+        addToast('info', `Calendar queued (${started.runId.slice(-6)}). Tracking in Live Activity.`);
+      } else {
+        addToast('success', 'Calendar generation started.');
+      }
       setCalThemes('');
       loadData();
     } catch (err: any) {
       addToast('error', err.message || 'Failed to start calendar generation');
     } finally {
       setCalLoading(false);
+    }
+  };
+
+  const handleCancelRun = async (runId: string) => {
+    setCancelingRunId(runId);
+    try {
+      const updated = await cancelRun(runId);
+      setRuns(prev => prev.map(run => run.id === updated.id ? updated : run));
+      addToast('success', `Run ${runId.slice(-6)} cancelled`);
+      void refreshRunsAndUsage();
+    } catch (err: any) {
+      addToast('error', err.message || 'Failed to cancel run');
+    } finally {
+      setCancelingRunId('');
     }
   };
 
@@ -143,7 +215,7 @@ export default function Dashboard({ onNavigate }: Props) {
 
   const BrandSelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
     <div className="brand-selector">
-      <select value={value} onChange={e => onChange(e.target.value)}>
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={!hasBrands}>
         {brands.length === 0 && <option value="">No brands configured</option>}
         {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
       </select>
@@ -160,6 +232,96 @@ export default function Dashboard({ onNavigate }: Props) {
         <h1>Upload one asset → <span className="accent">dozens of deliverables</span></h1>
         <p className="hero-sub">AI-powered content repurposing, SEO blogs, and social calendars — all from a single input.</p>
       </div>
+
+      <div className="card-grid">
+        <div className="card stat-card">
+          <div className="stat-icon">{health?.status === 'ok' ? '🟢' : '🔴'}</div>
+          <div>
+            <div className="stat-value">{health?.status === 'ok' ? 'Online' : 'Offline'}</div>
+            <div className="stat-label">System Health</div>
+          </div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-icon">⚡</div>
+          <div>
+            <div className="stat-value">{inProgressRuns.length}</div>
+            <div className="stat-label">Live Runs</div>
+          </div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-icon">🧠</div>
+          <div>
+            <div className="stat-value">{(usage?.totalTokens ?? 0).toLocaleString()}</div>
+            <div className="stat-label">Tokens Today</div>
+          </div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-icon">💸</div>
+          <div>
+            <div className="stat-value">{(usage?.totalCostUnits ?? 0).toFixed(1)}</div>
+            <div className="stat-label">Cost Units Today</div>
+          </div>
+        </div>
+      </div>
+
+      {!hasBrands && (
+        <div className="card onboarding-card">
+          <h3>Create your first brand profile</h3>
+          <p>
+            Pipelines use brand voice/tone to generate consistent output. Add one brand profile first, then run repurpose/blog/calendar flows.
+          </p>
+          <button className="btn primary" onClick={() => onNavigate('brands')}>
+            → Go To Brands
+          </button>
+        </div>
+      )}
+
+      {inProgressRuns.length > 0 && (
+        <div className="card live-activity-card">
+          <div className="live-activity-header">
+            <h3 style={{ margin: 0 }}>Live Pipeline Activity</h3>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn small" onClick={() => void refreshRunsAndUsage()} disabled={refreshingRuns}>
+                {refreshingRuns ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <button className="btn small" onClick={() => onNavigate('results')}>Open Results</button>
+            </div>
+          </div>
+          <div className="runs-list">
+            {inProgressRuns.slice(0, 5).map(run => (
+              <div key={run.id} className="run-item" onClick={() => onNavigate('results')}>
+                <div className="run-item-left">
+                  <div className="run-item-icon">{getPipelineIcon(run.pipelineId)}</div>
+                  <div className="run-item-info">
+                    <span className="run-item-name">{run.pipelineId}</span>
+                    <span className="run-item-meta">
+                      {run.brandId} • {new Date(run.startedAt).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+                <div className="run-item-right">
+                  <span className={`badge badge-${run.status}`}>
+                    <span className="badge-dot" />
+                    {run.status}
+                  </span>
+                  {isRunInProgress(run.status) && (
+                    <button
+                      className="btn danger small"
+                      onClick={e => {
+                        e.stopPropagation();
+                        void handleCancelRun(run.id);
+                      }}
+                      disabled={cancelingRunId === run.id}
+                    >
+                      {cancelingRunId === run.id ? 'Canceling…' : 'Cancel'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="quick-actions">
@@ -197,8 +359,8 @@ export default function Dashboard({ onNavigate }: Props) {
               ))}
             </div>
           </div>
-          <button className={`btn primary ${repurposeLoading ? 'btn-loading' : ''}`} onClick={handleRepurpose} disabled={repurposeLoading} style={{ width: '100%' }}>
-            {repurposeLoading ? 'Running...' : '▶ Repurpose'}
+          <button className={`btn primary ${repurposeLoading ? 'btn-loading' : ''}`} onClick={handleRepurpose} disabled={repurposeLoading || !hasBrands} style={{ width: '100%' }}>
+            {!hasBrands ? 'Create Brand First' : repurposeLoading ? 'Running...' : '▶ Repurpose'}
           </button>
           {repurposeLoading && <div className="progress-bar"><div className="progress-bar-fill" /></div>}
         </div>
@@ -229,8 +391,8 @@ export default function Dashboard({ onNavigate }: Props) {
               onChange={e => setBlogKeywords(e.target.value)}
             />
           </div>
-          <button className={`btn primary ${blogLoading ? 'btn-loading' : ''}`} onClick={handleBlog} disabled={blogLoading} style={{ width: '100%' }}>
-            {blogLoading ? 'Generating...' : '▶ Generate Blog'}
+          <button className={`btn primary ${blogLoading ? 'btn-loading' : ''}`} onClick={handleBlog} disabled={blogLoading || !hasBrands} style={{ width: '100%' }}>
+            {!hasBrands ? 'Create Brand First' : blogLoading ? 'Generating...' : '▶ Generate Blog'}
           </button>
           {blogLoading && <div className="progress-bar"><div className="progress-bar-fill" /></div>}
         </div>
@@ -266,8 +428,8 @@ export default function Dashboard({ onNavigate }: Props) {
               onChange={e => setCalThemes(e.target.value)}
             />
           </div>
-          <button className={`btn primary ${calLoading ? 'btn-loading' : ''}`} onClick={handleCalendar} disabled={calLoading} style={{ width: '100%' }}>
-            {calLoading ? 'Planning...' : '▶ Generate Calendar'}
+          <button className={`btn primary ${calLoading ? 'btn-loading' : ''}`} onClick={handleCalendar} disabled={calLoading || !hasBrands} style={{ width: '100%' }}>
+            {!hasBrands ? 'Create Brand First' : calLoading ? 'Planning...' : '▶ Generate Calendar'}
           </button>
           {calLoading && <div className="progress-bar"><div className="progress-bar-fill" /></div>}
         </div>
@@ -284,7 +446,7 @@ export default function Dashboard({ onNavigate }: Props) {
           </div>
         ) : (
           <div className="runs-list">
-            {runs.map(run => (
+            {recentRuns.map(run => (
               <div key={run.id} className="run-item" onClick={() => onNavigate('results')}>
                 <div className="run-item-left">
                   <div className="run-item-icon">{getPipelineIcon(run.pipelineId)}</div>

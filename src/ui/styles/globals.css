@@ -530,6 +530,34 @@ body {
   gap: 12px;
 }
 
+.onboarding-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+  border-color: rgba(0, 255, 65, 0.18);
+  background: linear-gradient(180deg, rgba(0, 255, 65, 0.04), rgba(0, 255, 65, 0.01));
+}
+
+.onboarding-card p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.live-activity-card {
+  margin-bottom: 24px;
+}
+
+.live-activity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
 /* ─── Usage Bar ───────────────────────── */
 
 .usage-bar-section {
@@ -633,6 +661,7 @@ body {
 .badge-running { background: rgba(59, 130, 246, 0.15); color: var(--info); }
 .badge-failed { background: rgba(255, 59, 92, 0.12); color: var(--error); }
 .badge-queued { background: rgba(255, 184, 0, 0.12); color: var(--warning); }
+.badge-cancelled { background: rgba(136, 136, 168, 0.15); color: var(--text-secondary); }
 
 .badge-dot {
   width: 6px;
@@ -645,6 +674,7 @@ body {
 .badge-completed .badge-dot, .badge-success .badge-dot { background: var(--success); }
 .badge-running .badge-dot { background: var(--info); animation: pulse 1.5s infinite; }
 .badge-failed .badge-dot { background: var(--error); }
+.badge-cancelled .badge-dot { background: var(--text-muted); }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -869,6 +899,22 @@ body {
 .toolbar select:focus {
   border-color: var(--accent);
   outline: none;
+}
+
+.toolbar input {
+  min-width: 220px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font);
+  outline: none;
+}
+
+.toolbar input:focus {
+  border-color: var(--accent);
 }
 
 /* ─── Two Column Layout ───────────────── */

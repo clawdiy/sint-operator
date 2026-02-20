@@ -12,6 +12,50 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+const TERMINAL_RUN_STATES = new Set(['completed', 'failed']);
+const IN_PROGRESS_RUN_STATES = new Set(['queued', 'running']);
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export function isAsyncRunStart(value: unknown): value is { runId: string; status: string } {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.runId === 'string' && typeof v.status === 'string';
+}
+
+export function isRunInProgress(status: unknown): boolean {
+  return typeof status === 'string' && IN_PROGRESS_RUN_STATES.has(status);
+}
+
+export function normalizeRunPayload(run: any): any {
+  if (!run || typeof run !== 'object') return run;
+
+  const nested = run.result && typeof run.result === 'object' ? run.result as Record<string, any> : null;
+  const outputs = Array.isArray(run.outputs)
+    ? run.outputs
+    : Array.isArray(nested?.outputs)
+      ? nested.outputs
+      : [];
+  const steps = Array.isArray(run.steps)
+    ? run.steps
+    : Array.isArray(nested?.steps)
+      ? nested.steps
+      : [];
+
+  return {
+    ...run,
+    pipelineId: run.pipelineId ?? nested?.pipelineId,
+    brandId: run.brandId ?? nested?.brandId,
+    startedAt: run.startedAt ?? nested?.startedAt,
+    completedAt: run.completedAt ?? nested?.completedAt,
+    status: run.status ?? nested?.status,
+    error: run.error ?? nested?.error,
+    outputs,
+    steps,
+    metering: run.metering ?? nested?.metering,
+  };
+}
+
 // Health
 export const getHealth = () => request<{
   status: string; version: string; skills: number; brands: number; pipelines: number;
@@ -31,6 +75,57 @@ export const runPipeline = (id: string, brandId: string, inputs: Record<string, 
     method: 'POST',
     body: JSON.stringify({ brandId, inputs }),
   });
+
+export interface RunPollOptions {
+  intervalMs?: number;
+  timeoutMs?: number;
+  onStatus?: (status: string) => void;
+}
+
+export async function waitForRun(runId: string, options: RunPollOptions = {}): Promise<any> {
+  const intervalMs = options.intervalMs ?? 1500;
+  const timeoutMs = options.timeoutMs ?? 5 * 60_000;
+  const deadline = Date.now() + timeoutMs;
+  let latest: any = null;
+
+  while (Date.now() <= deadline) {
+    try {
+      latest = await getRun(runId);
+    } catch {
+      await sleep(intervalMs);
+      continue;
+    }
+
+    const status = typeof latest?.status === 'string' ? latest.status : 'unknown';
+    options.onStatus?.(status);
+
+    if (TERMINAL_RUN_STATES.has(status)) {
+      const normalized = normalizeRunPayload(latest);
+      if (status === 'failed') {
+        throw new Error(normalized?.error || 'Pipeline execution failed');
+      }
+      return normalized;
+    }
+
+    await sleep(intervalMs);
+  }
+
+  throw new Error('Pipeline timed out while waiting for completion');
+}
+
+export async function runPipelineAndWait(
+  id: string,
+  brandId: string,
+  inputs: Record<string, unknown>,
+  options: RunPollOptions = {}
+): Promise<any> {
+  const started = await runPipeline(id, brandId, inputs);
+  if (isAsyncRunStart(started)) {
+    options.onStatus?.(started.status);
+    return waitForRun(started.runId, options);
+  }
+  return normalizeRunPayload(started);
+}
 
 // Quick Actions
 export const repurposeContent = (brandId: string, content: string, platforms: string[]) =>
@@ -80,12 +175,25 @@ export const getSkills = () => request<Array<{
 }>>('/api/skills');
 
 // Runs
-export const getRuns = () => request<Array<{
+export const getRuns = (filters?: { status?: string; pipelineId?: string; brandId?: string; limit?: number }) => {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.pipelineId) params.set('pipelineId', filters.pipelineId);
+  if (filters?.brandId) params.set('brandId', filters.brandId);
+  if (typeof filters?.limit === 'number') params.set('limit', String(filters.limit));
+  const query = params.toString();
+  return request<Array<{
   id: string; pipelineId: string; brandId: string; status: string; startedAt: string;
   completedAt?: string; metering: { totalTokens: number; totalCostUnits: number };
-}>>('/api/runs');
+}>>(query ? `/api/runs?${query}` : '/api/runs');
+};
 
 export const getRun = (id: string) => request<any>(`/api/runs/${id}`);
+
+export const cancelRun = async (id: string) => {
+  const res = await request<{ status: string; message: string; run: any }>(`/api/runs/${id}/cancel`, { method: 'POST' });
+  return normalizeRunPayload(res.run);
+};
 
 // Usage
 export const getUsage = (days?: number) => request<{
