@@ -20,6 +20,7 @@ import multer from 'multer';
 import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
 import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
+import { notifyPipelineComplete, isTelegramConfigured } from '../skills/notifier/telegram.js';
 
 // ─── Async Run Store ──────────────────────────────────────────
 
@@ -137,6 +138,13 @@ function enqueueAsyncRun(
         asyncRun.completedAt = new Date().toISOString();
         asyncRun.result = result;
         cleanupAsyncRuns();
+        // Telegram notification
+        if (isTelegramConfigured()) {
+          void notifyPipelineComplete(
+            asyncRun.pipelineId, asyncRun.brandId, asyncRun.id, 'completed',
+            { duration: Date.now() - new Date(asyncRun.startedAt).getTime(), costUnits: (result as any)?.metering?.totalCostUnits, tokensUsed: (result as any)?.metering?.totalTokens }
+          );
+        }
       })
       .catch(err => {
         if (asyncRun.status === 'cancelled') return;
@@ -144,6 +152,13 @@ function enqueueAsyncRun(
         asyncRun.completedAt = new Date().toISOString();
         asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
         cleanupAsyncRuns();
+        // Telegram notification
+        if (isTelegramConfigured()) {
+          void notifyPipelineComplete(
+            asyncRun.pipelineId, asyncRun.brandId, asyncRun.id, 'failed',
+            { error: asyncRun.error }
+          );
+        }
       });
   });
 
