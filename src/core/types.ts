@@ -100,6 +100,7 @@ export interface PlatformConstraints {
 export interface BrandProfile {
   owner_id?: string;
   id: string;
+  userId: string;
   name: string;
   voice: BrandVoice;
   visual: BrandVisual;

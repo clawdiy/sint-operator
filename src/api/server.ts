@@ -1,6 +1,6 @@
 /**
  * REST API Server v3
- * 
+ *
  * HTTP interface with:
  * - Async pipeline execution (returns run ID immediately)
  * - Proper CORS for Railway deployment
@@ -12,15 +12,23 @@
  */
 
 import express from 'express';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import multer from 'multer';
+import { ZodError, z } from 'zod';
 import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
 import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
 import { notifyPipelineComplete, isTelegramConfigured } from '../skills/notifier/telegram.js';
+import { createAuthRouter } from '../auth/auth-routes.js';
+import { requireAuth, type AuthenticatedRequest } from '../auth/auth-middleware.js';
+import { initAuthDB } from '../auth/auth-service.js';
+import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '../auth/api-key-service.js';
+import { createOnboardingRouter } from './onboarding.js';
+import { addNotification, createNotificationsRouter } from './notifications.js';
+import { createBrand, getBrand, listBrands, saveBrand } from '../core/brand/manager.js';
 
 // ─── Async Run Store ──────────────────────────────────────────
 
@@ -29,6 +37,7 @@ interface AsyncRun {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   pipelineId: string;
   brandId: string;
+  userId: string;
   startedAt: string;
   completedAt?: string;
   result?: unknown;
@@ -110,9 +119,55 @@ function toAsyncRunResponse(run: AsyncRun): Record<string, unknown> {
   return response;
 }
 
+function maskApiKey(apiKey: string): string {
+  if (apiKey.length <= 7) return '****';
+  return `${apiKey.slice(0, 3)}...${apiKey.slice(-4)}`;
+}
+
+function getRequestUser(req: express.Request, res: express.Response): { userId: string; email: string } | null {
+  const user = (req as AuthenticatedRequest).user;
+  if (!user?.userId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return null;
+  }
+  return user;
+}
+
+const apiKeySchema = z.object({
+  apiKey: z.string().trim().min(1),
+});
+
+const brandSchema = z.object({
+  name: z.string().trim().min(1),
+  voice: z.object({
+    tone: z.array(z.string()),
+    style: z.string(),
+    doNot: z.array(z.string()),
+    vocabulary: z.array(z.string()),
+    examples: z.array(z.string()),
+  }),
+  visual: z.object({
+    primaryColors: z.array(z.string()),
+    secondaryColors: z.array(z.string()),
+    fonts: z.array(z.string()),
+    logoUrl: z.string().optional(),
+    watermark: z.boolean().optional(),
+  }),
+  platforms: z.array(z.object({
+    platform: z.any(),
+    handle: z.string(),
+    credentials: z.string().optional(),
+    enabled: z.boolean(),
+    postingSchedule: z.string().optional(),
+  })),
+  keywords: z.array(z.string()),
+  competitors: z.array(z.string()),
+});
+
 function enqueueAsyncRun(
   pipelineId: string,
   brandId: string,
+  userId: string,
   execute: () => Promise<unknown>,
 ): AsyncRun {
   cleanupAsyncRuns();
@@ -122,6 +177,7 @@ function enqueueAsyncRun(
     status: 'queued',
     pipelineId,
     brandId,
+    userId,
     startedAt: new Date().toISOString(),
   };
 
@@ -137,6 +193,14 @@ function enqueueAsyncRun(
         asyncRun.status = 'completed';
         asyncRun.completedAt = new Date().toISOString();
         asyncRun.result = result;
+
+        addNotification(asyncRun.userId, {
+          type: 'run_completed',
+          title: 'Pipeline completed',
+          message: `${asyncRun.pipelineId} finished successfully.`,
+          runId: asyncRun.id,
+        });
+
         cleanupAsyncRuns();
         // Telegram notification
         if (isTelegramConfigured()) {
@@ -151,6 +215,14 @@ function enqueueAsyncRun(
         asyncRun.status = 'failed';
         asyncRun.completedAt = new Date().toISOString();
         asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
+
+        addNotification(asyncRun.userId, {
+          type: 'run_failed',
+          title: 'Pipeline failed',
+          message: asyncRun.error,
+          runId: asyncRun.id,
+        });
+
         cleanupAsyncRuns();
         // Telegram notification
         if (isTelegramConfigured()) {
@@ -165,8 +237,19 @@ function enqueueAsyncRun(
   return asyncRun;
 }
 
-export function createServer(orchestrator: Orchestrator, port: number = 18789) {
+export interface CreateServerOptions {
+  dataDir?: string;
+  configDir?: string;
+}
+
+export function createServer(orchestrator: Orchestrator, port: number = 18789, options: CreateServerOptions = {}) {
   const app = express();
+  const dataDir = resolve(options.dataDir ?? process.env.SINT_DATA_DIR ?? './data');
+  const configDir = resolve(options.configDir ?? process.env.SINT_CONFIG_DIR ?? './config');
+  const brandsDir = join(configDir, 'brands');
+
+  initAuthDB(dataDir);
+  initApiKeyDB(dataDir);
 
   // ─── CORS ─────────────────────────────────────────────────
   app.use(cors({
@@ -216,7 +299,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     });
   });
 
-  // ─── LLM Test ───────────────────────────────────────────
+  // ─── Public API Endpoints ───────────────────────────────
 
   app.post('/api/test-llm', async (_req, res) => {
     try {
@@ -228,6 +311,73 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
         mode: 'error',
         error: err instanceof Error ? err.message : 'Unknown error',
       });
+    }
+  });
+
+  app.use('/api/auth', createAuthRouter());
+
+  // Protect all /api routes except /api/test-llm and /api/auth/*
+  app.use('/api', (req, res, next) => {
+    if (req.path === '/test-llm' || req.path.startsWith('/auth')) {
+      next();
+      return;
+    }
+    requireAuth(req, res, next);
+  });
+
+  // ─── Onboarding / Settings / Notifications ───────────────
+
+  app.use('/api/onboarding', createOnboardingRouter({ brandsDir }));
+  app.use('/api/notifications', createNotificationsRouter());
+
+  app.post('/api/settings/api-key', (req, res) => {
+    try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
+      const payload = apiKeySchema.parse(req.body ?? {});
+      storeApiKey(user.userId, payload.apiKey);
+      res.json({ success: true, masked: maskApiKey(payload.apiKey) });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: error.issues[0]?.message ?? 'Invalid payload' });
+        return;
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.get('/api/settings/api-key', (req, res) => {
+    try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
+      if (!hasApiKey(user.userId)) {
+        res.json({ hasKey: false, masked: null });
+        return;
+      }
+
+      const apiKey = getApiKey(user.userId);
+      if (!apiKey) {
+        res.json({ hasKey: false, masked: null });
+        return;
+      }
+
+      res.json({ hasKey: true, masked: maskApiKey(apiKey) });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.delete('/api/settings/api-key', (req, res) => {
+    try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
+      deleteApiKey(user.userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -245,15 +395,22 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   app.post('/api/pipelines/:id/run', async (req, res) => {
     try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
       const { brandId, inputs } = req.body;
       if (!brandId) return res.status(400).json({ error: 'brandId required' });
       if (!orchestrator.getPipeline(req.params.id)) {
         return res.status(404).json({ error: 'Pipeline not found' });
       }
+      if (!getBrand(brandId, user.userId)) {
+        return res.status(404).json({ error: 'Brand not found' });
+      }
 
       const asyncRun = enqueueAsyncRun(
         req.params.id,
         brandId,
+        user.userId,
         () => orchestrator.runPipeline(req.params.id, brandId, inputs ?? {}),
       );
 
@@ -268,6 +425,9 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   app.post('/api/repurpose', async (req, res) => {
     try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
       const { brandId, content, platforms } = req.body;
       const parsedPlatforms = Array.isArray(platforms)
         ? platforms.filter((p: unknown): p is string => typeof p === 'string' && p.trim().length > 0)
@@ -275,10 +435,14 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
       if (!brandId || !content || parsedPlatforms.length === 0) {
         return res.status(400).json({ error: 'brandId, content, and platforms required' });
       }
+      if (!getBrand(brandId, user.userId)) {
+        return res.status(404).json({ error: 'Brand not found' });
+      }
 
       const asyncRun = enqueueAsyncRun(
         'content-repurpose',
         brandId,
+        user.userId,
         () => orchestrator.repurposeContent(brandId, content, parsedPlatforms),
       );
 
@@ -291,10 +455,17 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   app.post('/api/blog', async (req, res) => {
     try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
       const { brandId, topic, keywords } = req.body;
       if (!brandId || !topic) {
         return res.status(400).json({ error: 'brandId and topic required' });
       }
+      if (!getBrand(brandId, user.userId)) {
+        return res.status(404).json({ error: 'Brand not found' });
+      }
+
       const parsedKeywords = Array.isArray(keywords)
         ? keywords.filter((k: unknown): k is string => typeof k === 'string' && k.trim().length > 0)
         : [];
@@ -302,6 +473,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
       const asyncRun = enqueueAsyncRun(
         'seo-blog',
         brandId,
+        user.userId,
         () => orchestrator.generateBlogPost(brandId, topic, parsedKeywords),
       );
 
@@ -313,11 +485,18 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   app.post('/api/calendar', async (req, res) => {
     try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
       const { brandId, days, themes } = req.body;
       const parsedDays = Number(days);
       if (!brandId || !Number.isFinite(parsedDays) || parsedDays <= 0) {
         return res.status(400).json({ error: 'brandId and days required' });
       }
+      if (!getBrand(brandId, user.userId)) {
+        return res.status(404).json({ error: 'Brand not found' });
+      }
+
       const parsedThemes = Array.isArray(themes)
         ? themes.filter((t: unknown): t is string => typeof t === 'string' && t.trim().length > 0)
         : [];
@@ -325,6 +504,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
       const asyncRun = enqueueAsyncRun(
         'social-calendar',
         brandId,
+        user.userId,
         () => orchestrator.generateSocialCalendar(brandId, parsedDays, parsedThemes),
       );
 
@@ -336,21 +516,44 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   // ─── Brands ─────────────────────────────────────────────
 
-  app.get('/api/brands', (_req, res) => {
-    res.json(orchestrator.listBrands());
+  app.get('/api/brands', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
+    res.json(listBrands(user.userId));
   });
 
   app.get('/api/brands/:id', (req, res) => {
-    const brand = orchestrator.getBrand(req.params.id);
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
+    const brand = getBrand(req.params.id, user.userId);
     if (!brand) return res.status(404).json({ error: 'Brand not found' });
     res.json(brand);
   });
 
   app.post('/api/brands', (req, res) => {
     try {
-      const brand = orchestrator.createBrand(req.body);
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
+      const payload = brandSchema.parse(req.body ?? {});
+      const brand = createBrand(user.userId, {
+        name: payload.name,
+        voice: payload.voice,
+        visual: payload.visual,
+        platforms: payload.platforms as any,
+        keywords: payload.keywords,
+        competitors: payload.competitors,
+      });
+
+      saveBrand(brand, brandsDir);
       res.status(201).json(brand);
     } catch (err) {
+      if (err instanceof ZodError) {
+        res.status(400).json({ error: err.issues[0]?.message ?? 'Invalid payload' });
+        return;
+      }
       res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
   });
@@ -380,18 +583,26 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   // ─── Runs (both engine runs and async API runs) ─────────
 
   app.get('/api/runs', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
     cleanupAsyncRuns();
 
+    const userAsyncRuns = Array.from(asyncRuns.values()).filter(run => run.userId === user.userId);
+
     const wrappedEngineRunIds = new Set<string>();
-    for (const run of asyncRuns.values()) {
+    for (const run of userAsyncRuns) {
       if (!isObjectRecord(run.result)) continue;
       if (typeof run.result.id === 'string') {
         wrappedEngineRunIds.add(run.result.id);
       }
     }
 
-    const apiRuns = Array.from(asyncRuns.values()).map(toAsyncRunResponse);
-    const engineRuns = orchestrator.listRuns().filter(run => !wrappedEngineRunIds.has(run.id));
+    const apiRuns = userAsyncRuns.map(toAsyncRunResponse);
+    const engineRuns = orchestrator.listRuns().filter(run => {
+      if (wrappedEngineRunIds.has(run.id)) return false;
+      return !!getBrand(run.brandId, user.userId);
+    });
 
     const statusFilter = parseStringQuery(req.query.status)?.toLowerCase();
     const pipelineFilter = parseStringQuery(req.query.pipelineId)?.toLowerCase();
@@ -415,25 +626,35 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   });
 
   app.get('/api/runs/:id', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
     cleanupAsyncRuns();
 
     // Check async runs first
     const asyncRun = asyncRuns.get(req.params.id);
-    if (asyncRun) {
+    if (asyncRun && asyncRun.userId === user.userId) {
       return res.json(toAsyncRunResponse(asyncRun));
     }
 
     // Check engine runs
     const run = orchestrator.getRun(req.params.id);
-    if (!run) return res.status(404).json({ error: 'Run not found' });
+    if (!run || !getBrand(run.brandId, user.userId)) {
+      return res.status(404).json({ error: 'Run not found' });
+    }
     res.json(run);
   });
 
   app.post('/api/runs/:id/cancel', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
     cleanupAsyncRuns();
 
     const run = asyncRuns.get(req.params.id);
-    if (!run) return res.status(404).json({ error: 'Run not found or not cancelable' });
+    if (!run || run.userId !== user.userId) {
+      return res.status(404).json({ error: 'Run not found or not cancelable' });
+    }
 
     if (isTerminalStatus(run.status)) {
       return res.status(409).json({ error: `Run is already ${run.status}` });
@@ -476,13 +697,13 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   const uiPaths = [
-    join(__dirname, '..', 'ui-static'),              // dist/ui-static (production build)
-    join(__dirname, '..', 'ui', 'dist'),             // dist/ui/dist
-    join(__dirname, '..', '..', 'src', 'ui', 'dist'), // src/ui/dist (dev)
-    join(process.cwd(), 'src', 'ui', 'dist'),        // cwd/src/ui/dist
-    join(process.cwd(), 'dist', 'ui-static'),         // cwd/dist/ui-static
+    join(__dirname, '..', 'ui-static'),                // dist/ui-static (production build)
+    join(__dirname, '..', 'ui', 'dist'),               // dist/ui/dist
+    join(__dirname, '..', '..', 'src', 'ui', 'dist'),  // src/ui/dist (dev)
+    join(process.cwd(), 'src', 'ui', 'dist'),          // cwd/src/ui/dist
+    join(process.cwd(), 'dist', 'ui-static'),          // cwd/dist/ui-static
   ];
-  
+
   const uiPath = uiPaths.find(p => existsSync(p)) ?? null;
   console.log(`   UI search: ${uiPaths.map(p => `${existsSync(p) ? '✅' : '❌'} ${p}`).join('\n              ')}`);
   if (uiPath) {
@@ -502,12 +723,13 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     console.log(`\n🚀 SINT Marketing Operator API — http://localhost:${port}`);
     console.log(`   Health:    GET  /health`);
     console.log(`   Test LLM:  POST /api/test-llm`);
+    console.log(`   Auth:      POST /api/auth/signup | /api/auth/login`);
     console.log(`   Skills:    GET  /api/skills`);
     console.log(`   Usage:     GET  /api/usage`);
     console.log(`   Repurpose: POST /api/repurpose`);
     console.log(`   Blog:      POST /api/blog`);
     console.log(`   Calendar:  POST /api/calendar`);
-    console.log(`   Run Poll:  GET  /api/runs/:id\n`);
+    console.log(`   Run Poll:  GET  /api/runs/:id`);
     console.log(`   Run Cancel: POST /api/runs/:id/cancel\n`);
   });
 

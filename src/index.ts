@@ -58,7 +58,10 @@ const orchestrator = new Orchestrator({
   models: MODELS,
 });
 
-const { server } = createServer(orchestrator, PORT);
+const { server } = createServer(orchestrator, PORT, {
+  dataDir: DATA_DIR,
+  configDir: CONFIG_DIR,
+});
 
 // Graceful shutdown
 const shutdown = () => {

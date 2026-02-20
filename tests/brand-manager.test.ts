@@ -32,6 +32,7 @@ function setupTestBrands() {
 
   const testBrand: BrandProfile = {
     id: 'yaml-brand',
+    userId: 'test-user',
     name: 'YAML Test Brand',
     voice: {
       tone: ['bold', 'direct'],

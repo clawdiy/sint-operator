@@ -13,7 +13,7 @@
 
 import { join } from 'path';
 import { loadPipelines, executePipeline, listPipelines, getPipeline, getRun, listRuns, matchPipeline, matchAllPipelines } from '../core/pipeline/engine.js';
-import { loadBrands, getBrand, listBrands, saveBrand, createBrand } from '../core/brand/manager.js';
+import { loadBrands, getBrand, listBrands, saveBrand, createBrand as createManagedBrand } from '../core/brand/manager.js';
 import { ingestAsset, ingestText, ingestUrl, getAsset, listAssets } from '../core/assets/processor.js';
 import { registerSkill, discoverSkills, listSkillSummaries, getRegistrySize, getTokenEstimate, getSkill } from '../core/skills/registry.js';
 import { MemoryStore } from '../core/memory/store.js';
@@ -349,8 +349,15 @@ export class Orchestrator {
 
   // ─── Brand Management ─────────────────────────────────────
 
-  createBrand(data: Omit<BrandProfile, 'id' | 'createdAt' | 'updatedAt'>) {
-    const brand = createBrand(data);
+  createBrand(userId: string, data: Omit<BrandProfile, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): BrandProfile;
+  createBrand(data: Omit<BrandProfile, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): BrandProfile;
+  createBrand(
+    userIdOrData: string | Omit<BrandProfile, 'id' | 'userId' | 'createdAt' | 'updatedAt'>,
+    maybeData?: Omit<BrandProfile, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+  ) {
+    const brand = typeof userIdOrData === 'string'
+      ? createManagedBrand(userIdOrData, maybeData as Omit<BrandProfile, 'id' | 'userId' | 'createdAt' | 'updatedAt'>)
+      : createManagedBrand(userIdOrData);
     saveBrand(brand, join(this.config.configDir, 'brands'));
     return brand;
   }
@@ -388,10 +395,10 @@ export class Orchestrator {
     inputs: Record<string, unknown>,
   ): Promise<{ output: Record<string, unknown>; tokensUsed: number; costUnits: number; modelUsed: string; durationMs: number }> {
     const brand = getBrand(brandId);
-    if (!brand) throw new Error(\`Brand not found: \${brandId}\`);
+    if (!brand) throw new Error(`Brand not found: ${brandId}`);
 
     const skill = getSkill(skillId);
-    if (!skill) throw new Error(\`Skill not found: \${skillId}\`);
+    if (!skill) throw new Error(`Skill not found: ${skillId}`);
 
     const ctx = {
       inputs,
@@ -405,8 +412,8 @@ export class Orchestrator {
     const result = await skill.execute(ctx);
 
     this.metering.record({
-      id: \`mcp-\${Date.now()}-\${Math.random().toString(36).slice(2, 8)}\`,
-      runId: \`mcp-\${Date.now()}\`,
+      id: `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      runId: `mcp-${Date.now()}`,
       stepId: skillId,
       model: result.modelUsed,
       tier: 'routine' as const,
@@ -427,4 +434,3 @@ export class Orchestrator {
     this.logger.info('Orchestrator shut down');
   }
 }
-

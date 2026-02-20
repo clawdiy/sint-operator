@@ -1,6 +1,6 @@
 /**
  * Brand Context Manager
- * 
+ *
  * Loads, stores, and injects brand profiles into every generation.
  * Ensures voice, style, and visual consistency across all outputs.
  */
@@ -9,9 +9,46 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { join } from 'path';
 import yaml from 'js-yaml';
 import { nanoid } from 'nanoid';
-import type { BrandProfile, BrandVoice, BrandVisual, PlatformConfig } from '../types.js';
+import type { BrandProfile, PlatformConfig } from '../types.js';
 
 const brands = new Map<string, BrandProfile>();
+
+type CreateBrandData = Omit<BrandProfile, 'id' | 'userId' | 'createdAt' | 'updatedAt'>;
+
+function normalizeBrand(raw: unknown): BrandProfile | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const candidate = raw as Partial<BrandProfile>;
+  if (!candidate.id || typeof candidate.id !== 'string') {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+
+  return {
+    ...(candidate as BrandProfile),
+    userId: typeof candidate.userId === 'string' && candidate.userId.trim().length > 0
+      ? candidate.userId.trim()
+      : 'legacy',
+    createdAt: typeof candidate.createdAt === 'string' && candidate.createdAt.length > 0
+      ? candidate.createdAt
+      : now,
+    updatedAt: typeof candidate.updatedAt === 'string' && candidate.updatedAt.length > 0
+      ? candidate.updatedAt
+      : now,
+  };
+}
+
+function parseCreateArgs(userIdOrData: string | CreateBrandData, maybeData?: CreateBrandData): { userId: string; data: CreateBrandData } {
+  if (typeof userIdOrData === 'string') {
+    if (!maybeData) {
+      throw new Error('Brand payload is required');
+    }
+    return { userId: userIdOrData, data: maybeData };
+  }
+
+  return { userId: 'legacy', data: userIdOrData };
+}
 
 // ─── Load / Save ──────────────────────────────────────────────
 
@@ -25,7 +62,7 @@ export function loadBrands(dir: string): void {
   for (const file of files) {
     try {
       const raw = readFileSync(join(dir, file), 'utf-8');
-      const brand = yaml.load(raw) as BrandProfile;
+      const brand = normalizeBrand(yaml.load(raw));
       if (brand?.id) {
         brands.set(brand.id, brand);
       }
@@ -39,49 +76,84 @@ export function saveBrand(brand: BrandProfile, dir: string): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  const path = join(dir, `${brand.id}.yaml`);
-  writeFileSync(path, yaml.dump(brand, { lineWidth: 120 }));
-  brands.set(brand.id, brand);
+
+  const normalized: BrandProfile = {
+    ...brand,
+    userId: brand.userId || 'legacy',
+  };
+
+  const path = join(dir, `${normalized.id}.yaml`);
+  writeFileSync(path, yaml.dump(normalized, { lineWidth: 120 }));
+  brands.set(normalized.id, normalized);
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────
 
-export function createBrand(data: Omit<BrandProfile, 'id' | 'createdAt' | 'updatedAt'>): BrandProfile {
+export function createBrand(userId: string, data: CreateBrandData): BrandProfile;
+export function createBrand(data: CreateBrandData): BrandProfile;
+export function createBrand(userIdOrData: string | CreateBrandData, maybeData?: CreateBrandData): BrandProfile {
+  const { userId, data } = parseCreateArgs(userIdOrData, maybeData);
   const now = new Date().toISOString();
+
   const brand: BrandProfile = {
     id: nanoid(12),
+    userId,
     createdAt: now,
     updatedAt: now,
     ...data,
   };
+
   brands.set(brand.id, brand);
   return brand;
 }
 
-export function getBrand(id: string): BrandProfile | undefined {
-  return brands.get(id);
+export function getBrand(id: string, userId?: string): BrandProfile | undefined {
+  const brand = brands.get(id);
+  if (!brand) return undefined;
+  if (userId && brand.userId !== userId) return undefined;
+  return brand;
 }
 
-export function listBrands(): BrandProfile[] {
-  return Array.from(brands.values());
+export function listBrands(userId?: string): BrandProfile[] {
+  const all = Array.from(brands.values());
+  if (!userId) return all;
+  return all.filter(brand => brand.userId === userId);
 }
 
-export function updateBrand(id: string, updates: Partial<BrandProfile>): BrandProfile | undefined {
+export function updateBrand(id: string, userId: string, updates: Partial<BrandProfile>): BrandProfile | undefined;
+export function updateBrand(id: string, updates: Partial<BrandProfile>): BrandProfile | undefined;
+export function updateBrand(
+  id: string,
+  userIdOrUpdates: string | Partial<BrandProfile>,
+  maybeUpdates?: Partial<BrandProfile>,
+): BrandProfile | undefined {
   const existing = brands.get(id);
   if (!existing) return undefined;
+
+  const userId = typeof userIdOrUpdates === 'string' ? userIdOrUpdates : undefined;
+  const updates = typeof userIdOrUpdates === 'string' ? (maybeUpdates ?? {}) : userIdOrUpdates;
+
+  if (userId && existing.userId !== userId) {
+    return undefined;
+  }
 
   const updated: BrandProfile = {
     ...existing,
     ...updates,
-    id: existing.id,  // prevent id override
+    id: existing.id,
+    userId: existing.userId,
     createdAt: existing.createdAt,
     updatedAt: new Date().toISOString(),
   };
+
   brands.set(id, updated);
   return updated;
 }
 
-export function deleteBrand(id: string): boolean {
+export function deleteBrand(id: string, userId?: string): boolean {
+  const existing = brands.get(id);
+  if (!existing) return false;
+  if (userId && existing.userId !== userId) return false;
   return brands.delete(id);
 }
 
