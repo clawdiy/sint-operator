@@ -1,0 +1,95 @@
+id: ad-variations
+name: Ad Variations Pipeline
+description: "Analyze product photo → generate headline and layout variations at scale"
+version: "2.0"
+
+trigger:
+  type: asset_upload
+  pattern: "ad.*variations|create.*ads|generate.*ads|ad.*creatives"
+  accept:
+    - image/jpeg
+    - image/png
+    - image/webp
+
+inputs:
+  - name: product_photo
+    type: file
+    description: "Product or hero image to base ads on"
+    required: true
+  - name: brand_profile
+    type: reference
+    description: "Brand profile for style and messaging"
+    default: active_brand
+  - name: campaign_goal
+    type: string
+    description: "Campaign objective (awareness, conversion, engagement)"
+    default: conversion
+  - name: target_platforms
+    type: array
+    description: "Ad platforms and placements"
+    default: [instagram_feed, instagram_stories, facebook_feed, tiktok]
+
+steps:
+  - id: analyze_photo
+    skill: image-analyzer
+    modelTier: routine
+    action: >
+      Analyze the product photo: identify product, colors, composition,
+      mood, and key visual elements. Extract dominant colors and suggest
+      complementary ad backgrounds and overlays.
+    inputs:
+      product_photo: "${inputs.product_photo}"
+      brand_profile: "${inputs.brand_profile}"
+    output: photo_analysis
+
+  - id: generate_headlines
+    skill: copywriter
+    modelTier: complex
+    action: >
+      Generate 10 headline variations across different angles:
+      benefit-driven, curiosity, social proof, urgency, emotional,
+      and problem-solution. Each with a supporting subheadline and CTA.
+    inputs:
+      photo_analysis: "$photo_analysis"
+      brand_profile: "${inputs.brand_profile}"
+      campaign_goal: "${inputs.campaign_goal}"
+    count: 10
+    output: headlines
+
+  - id: generate_layouts
+    skill: ad-layout-generator
+    modelTier: complex
+    action: >
+      Generate 10 distinct ad layout variations combining the product
+      photo with headlines. Vary composition, text placement, background
+      treatment, and visual hierarchy. Output sized for each target platform.
+    inputs:
+      photo_analysis: "$photo_analysis"
+      headlines: "$headlines"
+      brand_profile: "${inputs.brand_profile}"
+      target_platforms: "${inputs.target_platforms}"
+    count: 10
+    parallel: true
+    output: layouts
+
+  - id: package
+    skill: asset-packager
+    modelTier: routine
+    action: >
+      Package all ad variations with naming conventions, platform specs,
+      and a preview sheet. Include recommended A/B test groupings.
+    inputs:
+      layouts: "$layouts"
+      headlines: "$headlines"
+      photo_analysis: "$photo_analysis"
+      target_platforms: "${inputs.target_platforms}"
+    output: ad_package
+
+outputs:
+  - format: ad_creative_package
+    includes:
+      - layout_previews
+      - headline_matrix
+      - platform_sized_assets
+      - ab_test_recommendations
+      - asset_naming_map

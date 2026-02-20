@@ -1,0 +1,33 @@
+features:
+  content-repurposing:
+    enabled: true
+    monthly_limit: 100
+    
+  seo-blog-writer:
+    enabled: true
+    monthly_limit: 50
+    
+  content-calendar:
+    enabled: true
+    monthly_limit: 10
+    
+  ad-variations:
+    enabled: true
+    monthly_limit: 30
+    
+  brand-identity:
+    enabled: true
+    monthly_limit: 5
+    
+  visual-metadata:
+    enabled: true
+    monthly_limit: 200
+    
+  infographic:
+    enabled: true
+    monthly_limit: 20
+
+cost_limits:
+  daily: 100
+  monthly: 2000
+  per_run: 50

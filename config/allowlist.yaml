@@ -1,0 +1,24 @@
+allowed_commands:
+  - ffmpeg
+  - node
+  - python3
+  - npm
+  - git
+  - curl
+  - playwright
+
+blocked_patterns:
+  - ">"
+  - "|"
+  - "sudo"
+  - "rm -rf"
+  - "eval("
+  - "exec("
+
+network_allowlist:
+  - api.anthropic.com
+  - api.openai.com
+  - api.stability.ai
+  - googleapis.com
+  - api.twitter.com
+  - graph.facebook.com

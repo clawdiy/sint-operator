@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  gateway:
+    build: .
+    ports:
+      - "18789:18789"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SINT_DATA_DIR=/app/data
+      - SINT_CONFIG_DIR=/app/config
+      - SINT_PORT=18789
+      - SINT_MODEL_COMPLEX=claude-opus-4-6
+      - SINT_MODEL_ROUTINE=claude-sonnet-4-5
+      - SINT_MODEL_FALLBACK=kimi-k2.5
+    restart: unless-stopped
+    depends_on:
+      - chromadb
+
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/chroma:/chroma/chroma
+
+  sandbox:
+    build: ./sandbox
+    privileged: false
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./data/workspace:/workspace
+    network_mode: "none"

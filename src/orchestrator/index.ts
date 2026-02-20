@@ -27,6 +27,12 @@ import { socialCalendarSkill } from '../skills/social-calendar/index.js';
 import { platformFormatterSkill } from '../skills/platform-formatter/index.js';
 import { assetIngesterSkill } from '../skills/asset-ingester/index.js';
 import { contentAnalyzerSkill } from '../skills/content-analyzer/index.js';
+import { videoClipperSkill } from '../skills/video-clipper/index.js';
+import { linkedinWriterSkill } from '../skills/linkedin-writer/index.js';
+import { outputPackagerSkill } from '../skills/output-packager/index.js';
+import { brandResearcherSkill } from '../skills/brand-researcher/index.js';
+import { serpScraperSkill } from '../skills/serp-scraper/index.js';
+import { seoOptimizerSkill } from '../skills/seo-optimizer/index.js';
 
 import type { BrandProfile, PipelineRun, Logger, ModelConfig } from '../core/types.js';
 
@@ -67,13 +73,19 @@ export class Orchestrator {
     // Initialize tools
     this.tools = createToolServices(config.openaiApiKey, config.openaiBaseUrl);
 
-    // Register built-in skills
+    // Register built-in skills (12 total)
     registerSkill(assetIngesterSkill);
     registerSkill(contentAnalyzerSkill);
     registerSkill(contentRepurposeSkill);
     registerSkill(seoBlogSkill);
     registerSkill(socialCalendarSkill);
     registerSkill(platformFormatterSkill);
+    registerSkill(videoClipperSkill);
+    registerSkill(linkedinWriterSkill);
+    registerSkill(outputPackagerSkill);
+    registerSkill(brandResearcherSkill);
+    registerSkill(serpScraperSkill);
+    registerSkill(seoOptimizerSkill);
 
     // Discover external skills (L1 — manifest only)
     discoverSkills(join(config.configDir, 'skills'));

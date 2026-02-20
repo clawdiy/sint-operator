@@ -1,0 +1,90 @@
+id: infographic
+name: Infographic Pipeline
+description: "Extract data → suggest visual metaphors → generate infographic → export"
+version: "2.0"
+
+trigger:
+  type: command
+  pattern: "infographic|visualize.*data|data.*graphic|make.*graphic"
+
+inputs:
+  - name: data_source
+    type: string
+    description: "Raw data, URL, or description of data to visualize"
+    required: true
+  - name: brand_profile
+    type: reference
+    description: "Brand profile for styling"
+    default: active_brand
+  - name: style
+    type: string
+    description: "Infographic style (statistical, timeline, process, comparison, geographic)"
+    default: auto
+  - name: dimensions
+    type: string
+    description: "Output dimensions"
+    default: "1080x1920"
+
+steps:
+  - id: extract_data
+    skill: data-extractor
+    modelTier: routine
+    action: >
+      Parse and structure the raw data source. Extract key metrics,
+      relationships, hierarchies, and trends. Clean and normalize
+      data points for visualization readiness.
+    inputs:
+      data_source: "${inputs.data_source}"
+    output: structured_data
+
+  - id: suggest_metaphor
+    skill: creative-director
+    modelTier: complex
+    action: >
+      Suggest 3 visual metaphor approaches for presenting the data.
+      Consider the data type, audience, and brand personality.
+      Recommend layout structure, icon systems, and narrative flow.
+    inputs:
+      structured_data: "$structured_data"
+      brand_profile: "${inputs.brand_profile}"
+      style: "${inputs.style}"
+    output: creative_direction
+
+  - id: generate
+    skill: infographic-designer
+    modelTier: complex
+    action: >
+      Generate the infographic using the selected visual metaphor.
+      Apply brand colors, typography, and iconography. Ensure data
+      accuracy, visual hierarchy, and readability at target dimensions.
+    inputs:
+      structured_data: "$structured_data"
+      creative_direction: "$creative_direction"
+      brand_profile: "${inputs.brand_profile}"
+      dimensions: "${inputs.dimensions}"
+    retry:
+      max: 2
+      backoff: exponential
+    output: infographic_draft
+
+  - id: export
+    skill: content-exporter
+    modelTier: routine
+    action: >
+      Export the final infographic in multiple formats (PNG, SVG, PDF).
+      Include an editable source file and individual section exports
+      for social media cropping.
+    inputs:
+      infographic_draft: "$infographic_draft"
+      dimensions: "${inputs.dimensions}"
+    output: export_package
+
+outputs:
+  - format: infographic_package
+    includes:
+      - infographic_png
+      - infographic_svg
+      - infographic_pdf
+      - section_crops
+      - editable_source
+      - data_citations

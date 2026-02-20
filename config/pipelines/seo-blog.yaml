@@ -1,26 +1,104 @@
 id: seo-blog
-name: SEO Blog Generator Pipeline
-description: Generate a full SEO-optimized blog article with metadata
-version: "1.0"
+name: SEO Blog Pipeline
+description: "Keyword → SERP analysis → gap identification → optimized blog post"
+version: "2.0"
 
 trigger:
-  type: manual
+  type: command
+  pattern: "seo.*blog|write.*blog.*for|rank.*for"
+
+inputs:
+  - name: keyword
+    type: string
+    description: "Primary keyword or topic to target"
+    required: true
+  - name: brand_profile
+    type: reference
+    description: "Brand profile for tone and voice"
+    default: active_brand
+  - name: word_count
+    type: integer
+    description: "Target word count"
+    default: 1800
+  - name: language
+    type: string
+    description: "Content language"
+    default: en
 
 steps:
-  - id: generate_blog
-    name: Generate SEO Blog Post
-    skill: seo-blog
+  - id: serp_analysis
+    skill: seo-researcher
+    modelTier: routine
+    action: >
+      Search top 10 SERP results for the keyword.
+      Extract titles, headings, word counts, content structure,
+      featured snippets, and People Also Ask questions.
     inputs:
-      topic: "${inputs.topic}"
-      keywords: "${inputs.keywords}"
+      keyword: "${inputs.keyword}"
+      language: "${inputs.language}"
+    output: serp_data
+
+  - id: gap_analysis
+    skill: content-analyzer
+    modelTier: complex
+    action: >
+      Compare top-ranking content to identify gaps and opportunities.
+      Determine missing subtopics, weak sections, and angles
+      competitors haven't covered. Build an optimized outline.
+    inputs:
+      serp_data: "$serp_data"
+      keyword: "${inputs.keyword}"
+      brand_profile: "${inputs.brand_profile}"
+    output: content_brief
+
+  - id: write
+    skill: content-writer
+    modelTier: complex
+    action: >
+      Write a comprehensive blog post following the content brief.
+      Match brand voice, include all identified gap topics,
+      and structure for readability and engagement.
+    inputs:
+      content_brief: "$content_brief"
+      keyword: "${inputs.keyword}"
       word_count: "${inputs.word_count}"
-      style: "${inputs.style}"
+      brand_profile: "${inputs.brand_profile}"
     retry:
-      max: 1
-      backoff: linear
+      max: 2
+      backoff: exponential
+    output: draft_article
+
+  - id: seo_optimize
+    skill: seo-optimizer
+    modelTier: routine
+    action: >
+      Optimize the draft for on-page SEO: meta title, meta description,
+      heading hierarchy, keyword density, internal link suggestions,
+      schema markup recommendations, and readability score.
+    inputs:
+      draft: "$draft_article"
+      keyword: "${inputs.keyword}"
+      serp_data: "$serp_data"
+    output: optimized_article
+
+  - id: export
+    skill: content-exporter
+    modelTier: routine
+    action: >
+      Package the final article with SEO metadata, suggested images,
+      and publishing-ready HTML/Markdown formats.
+    inputs:
+      article: "$optimized_article"
+      keyword: "${inputs.keyword}"
+    output: final_package
 
 outputs:
-  - platform: blog
-    format: article
-    constraints:
-      maxLength: 50000
+  - format: markdown
+    includes:
+      - article_body
+      - meta_title
+      - meta_description
+      - heading_structure
+      - keyword_density_report
+      - internal_link_suggestions
+      - schema_markup

@@ -1,0 +1,20 @@
+routing:
+  default: claude-sonnet-4-5
+  
+  rules:
+    # Complex reasoning → strongest model
+    - match: [brand-researcher, content-strategist, seo-blog-writer, gap-analysis]
+      model: claude-opus-4-6
+      max_tokens: 8192
+    
+    # Routine generation → cost-effective
+    - match: [linkedin-writer, copywriter, metadata-writer, calendar-builder]
+      model: claude-sonnet-4-5
+      max_tokens: 4096
+    
+    # High-volume batch → cheapest capable
+    - match: [image-analyzer, data-extractor, seo-optimizer]
+      model: claude-haiku-4-5
+      max_tokens: 2048
+    
+  fallback: kimi-k2.5
