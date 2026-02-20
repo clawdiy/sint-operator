@@ -1,38 +1,29 @@
 version: "3.8"
 
 services:
-  gateway:
+  operator:
     build: .
     ports:
       - "18789:18789"
-    volumes:
-      - ./data:/app/data
-      - ./config:/app/config
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PORT=18789
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - SINT_DATA_DIR=/app/data
-      - SINT_CONFIG_DIR=/app/config
-      - SINT_PORT=18789
-      - SINT_MODEL_COMPLEX=claude-opus-4-6
-      - SINT_MODEL_ROUTINE=claude-sonnet-4-5
-      - SINT_MODEL_FALLBACK=kimi-k2.5
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-sint-dev-secret-change-me}
+      - TWITTER_API_KEY=${TWITTER_API_KEY}
+      - TWITTER_API_SECRET=${TWITTER_API_SECRET}
+      - TWITTER_ACCESS_TOKEN=${TWITTER_ACCESS_TOKEN}
+      - TWITTER_ACCESS_SECRET=${TWITTER_ACCESS_SECRET}
+      - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN}
+      - LINKEDIN_PERSON_URN=${LINKEDIN_PERSON_URN}
+    volumes:
+      - sint-data:/app/data
     restart: unless-stopped
-    depends_on:
-      - chromadb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  chromadb:
-    image: chromadb/chroma:latest
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data/chroma:/chroma/chroma
-
-  sandbox:
-    build: ./sandbox
-    privileged: false
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - ./data/workspace:/workspace
-    network_mode: "none"
+volumes:
+  sint-data:
