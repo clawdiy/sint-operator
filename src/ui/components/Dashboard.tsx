@@ -62,10 +62,10 @@ export default function Dashboard({ onNavigate }: Props) {
 
   const loadData = useCallback(() => {
     Promise.all([
-      getHealth().catch(() => null),
-      getRuns().catch(() => []),
+      getHealth().catch((e: any) => { addToast('error', e.message || 'Failed to load health'); return null; }),
+      getRuns().catch((e: any) => { addToast('error', e.message || 'Failed to load runs'); return []; }),
       getUsage(1).catch(() => null),
-      getBrands().catch(() => []),
+      getBrands().catch((e: any) => { addToast('error', e.message || 'Failed to load brands'); return []; }),
     ]).then(([h, r, u, b]) => {
       setHealth(h);
       const normalizedRuns = Array.isArray(r) ? sortRunsByStartedAt(r.map(normalizeRunPayload)) : [];
@@ -91,7 +91,7 @@ export default function Dashboard({ onNavigate }: Props) {
     setRefreshingRuns(true);
     try {
       const [nextRuns, nextUsage] = await Promise.all([
-        getRuns().catch(() => []),
+        getRuns().catch((e: any) => { addToast('error', e.message || 'Failed to load runs'); return []; }),
         getUsage(1).catch(() => null),
       ]);
       const normalizedRuns = Array.isArray(nextRuns) ? sortRunsByStartedAt(nextRuns.map(normalizeRunPayload)) : [];

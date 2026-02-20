@@ -1,6 +1,6 @@
 import React from 'react';
 
-type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills';
+type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings';
 
 const NAV_ITEMS: { page: Page; icon: string; label: string }[] = [
   { page: 'dashboard', icon: '🏠', label: 'Dashboard' },
@@ -10,6 +10,7 @@ const NAV_ITEMS: { page: Page; icon: string; label: string }[] = [
   { page: 'assets', icon: '📁', label: 'Assets' },
   { page: 'usage', icon: '📈', label: 'Usage' },
   { page: 'skills', icon: '🧩', label: 'Skills' },
+  { page: 'settings', icon: '⚙️', label: 'Settings' },
 ];
 
 interface Props {
@@ -42,7 +43,7 @@ export default function Layout({ currentPage, onNavigate, children }: Props) {
           ))}
         </nav>
         <div className="sidebar-footer">
-          {!collapsed && <span className="version">v0.4.0</span>}
+          {!collapsed && <span className="version">v0.5.0</span>}
         </div>
       </aside>
       <main className="content">

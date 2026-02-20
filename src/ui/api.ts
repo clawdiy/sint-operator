@@ -1,10 +1,27 @@
 const BASE = '';
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('sint_auth_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export function setAuthToken(token: string) {
+  localStorage.setItem('sint_auth_token', token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem('sint_auth_token');
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options?.headers },
     ...options,
   });
+  if (res.status === 401) {
+    clearAuthToken();
+    throw new Error('Unauthorized – please log in again');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || res.statusText);

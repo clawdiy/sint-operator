@@ -93,7 +93,7 @@ export default function Brands() {
   const load = () => {
     getBrands()
       .then(b => { setBrands(Array.isArray(b) ? b : []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((e: any) => { setLoading(false); addToast('error', e.message || 'Failed to load brands'); });
   };
 
   useEffect(load, []);

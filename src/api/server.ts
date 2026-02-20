@@ -341,7 +341,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
-      version: '0.4.0',
+      version: process.env.npm_package_version || '0.5.0',
       name: 'SINT Marketing Operator',
       skills: orchestrator.listSkills().length,
       brands: orchestrator.listBrands().length,
@@ -366,9 +366,9 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   app.use('/api/auth', createAuthRouter());
 
-  // Protect all /api routes except /api/test-llm and /api/auth/*
+  // Protect all /api routes (only when AUTH_ENABLED=true)
   app.use('/api', (req, res, next) => {
-    if (req.path === '/test-llm' || req.path.startsWith('/auth')) {
+    if (process.env.AUTH_ENABLED !== 'true' || req.path === '/test-llm' || req.path.startsWith('/auth')) {
       next();
       return;
     }

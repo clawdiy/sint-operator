@@ -7,14 +7,15 @@ import Results from './components/Results';
 import Assets from './components/Assets';
 import Usage from './components/Usage';
 import Skills from './components/Skills';
+import Settings from './components/Settings';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 
-type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills';
+type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings';
 
 function getPageFromHash(): Page {
   const hash = window.location.hash.slice(1);
-  const valid: Page[] = ['dashboard', 'pipelines', 'brands', 'results', 'assets', 'usage', 'skills'];
+  const valid: Page[] = ['dashboard', 'pipelines', 'brands', 'results', 'assets', 'usage', 'skills', 'settings'];
   return valid.includes(hash as Page) ? (hash as Page) : 'dashboard';
 }
 
@@ -41,6 +42,7 @@ export default function App() {
       case 'assets': return <Assets />;
       case 'usage': return <Usage />;
       case 'skills': return <Skills />;
+      case 'settings': return <Settings />;
       default: return <Dashboard onNavigate={navigate} />;
     }
   };
