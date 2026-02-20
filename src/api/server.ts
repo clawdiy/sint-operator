@@ -178,10 +178,16 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   // Serve built UI from src/ui/dist/
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
-  const uiDistPath = join(__dirname, '..', 'ui', 'dist');
-  const uiDistPathAlt = join(__dirname, '..', '..', 'src', 'ui', 'dist');
+  const uiPaths = [
+    join(__dirname, '..', 'ui-static'),              // dist/ui-static (production build)
+    join(__dirname, '..', 'ui', 'dist'),             // dist/ui/dist
+    join(__dirname, '..', '..', 'src', 'ui', 'dist'), // src/ui/dist (dev)
+    join(process.cwd(), 'src', 'ui', 'dist'),        // cwd/src/ui/dist
+    join(process.cwd(), 'dist', 'ui-static'),         // cwd/dist/ui-static
+  ];
   
-  const uiPath = existsSync(uiDistPath) ? uiDistPath : existsSync(uiDistPathAlt) ? uiDistPathAlt : null;
+  const uiPath = uiPaths.find(p => existsSync(p)) ?? null;
+  console.log(`   UI search: ${uiPaths.map(p => `${existsSync(p) ? '✅' : '❌'} ${p}`).join('\n              ')}`);
   if (uiPath) {
     app.use(express.static(uiPath));
     // SPA fallback — serve index.html for non-API routes
