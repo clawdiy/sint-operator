@@ -52,10 +52,10 @@ export const socialCalendarSkill: Skill = {
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
-    const days = ctx.inputs.days as number;
-    const themes = (ctx.inputs.themes as string[]) ?? [];
-    const platforms = (ctx.inputs.platforms as string[]) ?? ['twitter', 'linkedin', 'instagram'];
-    const postsPerDay = (ctx.inputs.posts_per_day as number) ?? 1;
+    const days = typeof ctx.inputs.days === 'number' ? ctx.inputs.days : Number(ctx.inputs.days) || 7;
+    const themes = Array.isArray(ctx.inputs.themes) ? ctx.inputs.themes : [];
+    const platforms = Array.isArray(ctx.inputs.platforms) ? ctx.inputs.platforms : ['twitter', 'linkedin', 'instagram'];
+    const postsPerDay = typeof ctx.inputs.posts_per_day === 'number' ? ctx.inputs.posts_per_day : Number(ctx.inputs.posts_per_day) || 1;
     const startDate = (ctx.inputs.start_date as string) || new Date().toISOString().split('T')[0];
 
     const brandContext = buildBrandContext(ctx.brand);

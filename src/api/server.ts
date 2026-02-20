@@ -9,15 +9,19 @@
  * - Run status polling
  * - Metering endpoints
  * - Skill discovery
+ * - SSE streaming for run progress
+ * - Rate limiting
  */
 
 import express from 'express';
 import { join, dirname, resolve } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { EventEmitter } from 'events';
 import cors from 'cors';
 import multer from 'multer';
 import { ZodError, z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
 import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
@@ -29,6 +33,40 @@ import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '.
 import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, createNotificationsRouter } from './notifications.js';
 import { createBrand, getBrand, listBrands, saveBrand } from '../core/brand/manager.js';
+
+// ─── SSE Event Bus ───────────────────────────────────────────
+
+interface RunEvent {
+  runId: string;
+  type: 'status' | 'step' | 'complete' | 'error';
+  data: Record<string, unknown>;
+  timestamp: string;
+}
+
+const runEvents = new EventEmitter();
+runEvents.setMaxListeners(100);
+
+export function emitRunEvent(event: RunEvent): void {
+  runEvents.emit(`run:${event.runId}`, event);
+}
+
+// ─── Rate Limiters ───────────────────────────────────────────
+
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const pipelineLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many pipeline requests, please try again later.' },
+});
 
 // ─── Async Run Store ──────────────────────────────────────────
 
@@ -183,9 +221,13 @@ function enqueueAsyncRun(
 
   asyncRuns.set(asyncRun.id, asyncRun);
 
+  emitRunEvent({ runId: asyncRun.id, type: 'status', data: { status: 'queued' }, timestamp: asyncRun.startedAt });
+
   queueMicrotask(() => {
     if (asyncRun.status === 'cancelled') return;
     asyncRun.status = 'running';
+
+    emitRunEvent({ runId: asyncRun.id, type: 'status', data: { status: 'running' }, timestamp: new Date().toISOString() });
 
     void execute()
       .then(result => {
@@ -197,9 +239,10 @@ function enqueueAsyncRun(
         addNotification(asyncRun.userId, {
           type: 'run_completed',
           title: 'Pipeline completed',
-          message: `${asyncRun.pipelineId} finished successfully.`,
+          message: \`\${asyncRun.pipelineId} finished successfully.\`,
           runId: asyncRun.id,
         });
+        emitRunEvent({ runId: asyncRun.id, type: 'complete', data: { status: 'completed', result }, timestamp: asyncRun.completedAt });
 
         cleanupAsyncRuns();
         // Telegram notification
@@ -222,6 +265,7 @@ function enqueueAsyncRun(
           message: asyncRun.error,
           runId: asyncRun.id,
         });
+        emitRunEvent({ runId: asyncRun.id, type: 'error', data: { status: 'failed', error: asyncRun.error }, timestamp: asyncRun.completedAt });
 
         cleanupAsyncRuns();
         // Telegram notification
@@ -271,7 +315,13 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   app.use("/api/publish", createPublishRoutes());
   app.use("/mcp", createMCPRoutes(orchestrator));
 
-  const upload = multer({ dest: '/tmp/sint-uploads/' });
+  // Rate limiting
+  app.use('/api/', generalLimiter);
+
+  // File upload — use SINT_DATA_DIR for uploads
+  const uploadDir = join(process.env.SINT_DATA_DIR ?? './data', 'uploads');
+  mkdirSync(uploadDir, { recursive: true });
+  const upload = multer({ dest: uploadDir, limits: { fileSize: 100 * 1024 * 1024 } });
 
   // ─── Timeout Middleware ───────────────────────────────────
   // 30s default, pipeline routes get 60s
@@ -393,7 +443,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     res.json(pipeline);
   });
 
-  app.post('/api/pipelines/:id/run', async (req, res) => {
+  app.post('/api/pipelines/:id/run', pipelineLimiter, async (req, res) => {
     try {
       const user = getRequestUser(req, res);
       if (!user) return;
@@ -423,7 +473,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // ─── Quick Actions (async) ──────────────────────────────
 
-  app.post('/api/repurpose', async (req, res) => {
+  app.post('/api/repurpose', pipelineLimiter, async (req, res) => {
     try {
       const user = getRequestUser(req, res);
       if (!user) return;
@@ -453,7 +503,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     }
   });
 
-  app.post('/api/blog', async (req, res) => {
+  app.post('/api/blog', pipelineLimiter, async (req, res) => {
     try {
       const user = getRequestUser(req, res);
       if (!user) return;
@@ -483,7 +533,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     }
   });
 
-  app.post('/api/calendar', async (req, res) => {
+  app.post('/api/calendar', pipelineLimiter, async (req, res) => {
     try {
       const user = getRequestUser(req, res);
       if (!user) return;
@@ -578,6 +628,55 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   app.get('/api/skills', (_req, res) => {
     res.json(orchestrator.listSkills());
+  });
+
+  // ─── SSE Run Streaming ──────────────────────────────────
+
+  app.get('/api/runs/:id/stream', (req, res) => {
+    const runId = req.params.id;
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'connected', runId })}\n\n`);
+
+    const listener = (event: RunEvent) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (event.type === 'complete' || event.type === 'error') {
+        cleanup();
+        res.end();
+      }
+    };
+
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 15_000);
+
+    const cleanup = () => {
+      clearInterval(heartbeat);
+      runEvents.removeListener(`run:${runId}`, listener);
+    };
+
+    runEvents.on(`run:${runId}`, listener);
+    req.on('close', cleanup);
+
+    // If run is already terminal, send final event immediately
+    const existingRun = asyncRuns.get(runId);
+    if (existingRun && isTerminalStatus(existingRun.status)) {
+      const eventType = existingRun.status === 'completed' ? 'complete' : 'error';
+      res.write(`data: ${JSON.stringify({
+        runId,
+        type: eventType,
+        data: { status: existingRun.status, result: existingRun.result, error: existingRun.error },
+        timestamp: existingRun.completedAt ?? new Date().toISOString(),
+      })}\n\n`);
+      cleanup();
+      res.end();
+    }
   });
 
   // ─── Runs (both engine runs and async API runs) ─────────
@@ -730,6 +829,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     console.log(`   Blog:      POST /api/blog`);
     console.log(`   Calendar:  POST /api/calendar`);
     console.log(`   Run Poll:  GET  /api/runs/:id`);
+    console.log(\`   Run Stream: GET  /api/runs/:id/stream (SSE)\`);
     console.log(`   Run Cancel: POST /api/runs/:id/cancel\n`);
   });
 

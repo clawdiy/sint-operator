@@ -1,6 +1,6 @@
 id: social-calendar
 name: Social Media Calendar Pipeline
-description: "Research trends → strategy → full content calendar with scheduled posts"
+description: "Generate a multi-day content calendar with platform-specific posts"
 version: "2.0"
 
 trigger:
@@ -12,74 +12,41 @@ inputs:
     type: reference
     description: "Brand profile for tone, audience, and platforms"
     default: active_brand
-  - name: duration_weeks
+  - name: days
     type: integer
-    description: "Calendar duration in weeks"
-    default: 4
+    description: "Number of days to plan"
+    default: 7
+  - name: themes
+    type: array
+    description: "Content themes/pillars"
+    default: []
   - name: platforms
     type: array
     description: "Target platforms"
-    default: [instagram, tiktok, linkedin, twitter]
-  - name: posts_per_week
+    default: [twitter, linkedin, instagram]
+  - name: posts_per_day
     type: integer
-    description: "Number of posts per platform per week"
-    default: 5
+    description: "Posts per platform per day"
+    default: 1
 
 steps:
-  - id: research
-    skill: trend-researcher
-    modelTier: routine
-    action: >
-      Analyze current trends, hashtags, and viral content patterns
-      for each target platform. Identify seasonal events, holidays,
-      and industry moments within the calendar window.
-    inputs:
-      platforms: "${inputs.platforms}"
-      brand_profile: "${inputs.brand_profile}"
-      duration_weeks: "${inputs.duration_weeks}"
-    output: trend_data
-
-  - id: strategy
-    skill: content-strategist
+  - id: generate
+    skill: social-calendar
     modelTier: complex
     action: >
-      Build a content strategy based on trends, brand goals, and
-      audience insights. Define content pillars, posting cadence,
-      optimal times, and content mix ratios per platform.
+      Generate a complete multi-day content calendar with individual
+      post entries. Each entry includes: date, time, platform, content,
+      hashtags, visual direction, and content type.
     inputs:
-      trend_data: "$trend_data"
-      brand_profile: "${inputs.brand_profile}"
+      days: "${inputs.days}"
+      themes: "${inputs.themes}"
       platforms: "${inputs.platforms}"
-      posts_per_week: "${inputs.posts_per_week}"
-    output: content_strategy
-
-  - id: generate_calendar
-    skill: calendar-generator
-    modelTier: complex
-    action: >
-      Generate complete calendar with individual post entries.
-      Each entry includes: date, time, platform, content type,
-      caption/copy, hashtags, visual direction, and CTA.
-    inputs:
-      content_strategy: "$content_strategy"
-      trend_data: "$trend_data"
-      duration_weeks: "${inputs.duration_weeks}"
+      posts_per_day: "${inputs.posts_per_day}"
       brand_profile: "${inputs.brand_profile}"
     retry:
       max: 2
       backoff: exponential
     output: calendar
-
-  - id: notify
-    skill: notifier
-    modelTier: routine
-    action: >
-      Send the completed calendar to the operator via preferred channel.
-      Include summary stats and next-action recommendations.
-    inputs:
-      calendar: "$calendar"
-      brand_profile: "${inputs.brand_profile}"
-    output: notification_result
 
 outputs:
   - format: calendar_json
@@ -87,5 +54,4 @@ outputs:
       - posts_by_date
       - platform_breakdown
       - hashtag_sets
-      - visual_briefs
       - strategy_summary

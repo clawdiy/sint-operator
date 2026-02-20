@@ -277,7 +277,7 @@ export class Orchestrator {
     return run;
   }
 
-  async generateSocialCalendar(brandId: string, days: number, themes: string[]): Promise<PipelineRun> {
+  async generateSocialCalendar(brandId: string, days: number, themes: string[], platforms?: string[]): Promise<PipelineRun> {
     const brand = getBrand(brandId);
     if (!brand) throw new Error(`Brand not found: ${brandId}`);
 
@@ -299,7 +299,7 @@ export class Orchestrator {
 
       const start = Date.now();
       const result = await skill.execute({
-        inputs: { days, themes, platforms: ['twitter', 'linkedin', 'instagram'], posts_per_day: 1 },
+        inputs: { days, themes, platforms: platforms ?? ['twitter', 'linkedin', 'instagram'], posts_per_day: 1 },
         brand,
         llm: this.llm,
         tools: this.tools,

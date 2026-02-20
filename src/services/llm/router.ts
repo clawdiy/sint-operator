@@ -47,6 +47,12 @@ const ROUTINE_PATTERNS = [
 const ROUTINE_TIMEOUT_MS = 30_000;
 const COMPLEX_TIMEOUT_MS = 60_000;
 
+// Retry constants
+const RETRY_MAX_ATTEMPTS = 3;
+const RETRY_INITIAL_DELAY_MS = 1_000;
+const RETRY_MAX_DELAY_MS = 30_000;
+const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 529];
+
 export interface LLMRouterConfig {
   apiKey: string;
   baseUrl?: string;
@@ -252,6 +258,44 @@ function generateMockFromPrompt(prompt: string): Record<string, unknown> {
   };
 }
 
+/**
+ * Check if an error is retryable (rate limit, server error, etc.)
+ */
+function isRetryableError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const e = err as any;
+  if (typeof e.status === 'number' && RETRYABLE_STATUS_CODES.includes(e.status)) return true;
+  if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED') return true;
+  if (err.name === 'AbortError') return false; // timeouts are not retryable
+  return false;
+}
+
+/**
+ * Generic retry wrapper with exponential backoff and retry-after support.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts: number = RETRY_MAX_ATTEMPTS,
+): Promise<T> {
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (!isRetryableError(err) || attempt === maxAttempts - 1) throw lastErr;
+
+      const delay = Math.min(RETRY_INITIAL_DELAY_MS * Math.pow(2, attempt), RETRY_MAX_DELAY_MS);
+      const retryAfter = (err as any)?.headers?.['retry-after'];
+      const waitMs = retryAfter ? Math.min(parseInt(retryAfter, 10) * 1000, RETRY_MAX_DELAY_MS) : delay;
+      console.warn(`[LLM] ${label} attempt ${attempt + 1} failed (${formatError(err)}), retrying in ${waitMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+    }
+  }
+  throw lastErr!;
+}
+
 export class LLMRouterImpl implements LLMRouter {
   private client: OpenAI;
   private models: ModelConfig;
@@ -378,42 +422,45 @@ export class LLMRouterImpl implements LLMRouter {
     const timeoutMs = this.getTimeoutForTier(tier);
 
     try {
-      const timeout = createTimeoutSignal(timeoutMs);
-      try {
-        const response = await this.client.chat.completions.create(
-          {
-            model,
-            messages,
-            temperature: options?.temperature ?? 0.7,
-            max_tokens: options?.maxTokens ?? 4096,
-          },
-          { signal: timeout.signal }
-        );
-        timeout.clear();
+      const response = await withRetry(async () => {
+        const timeout = createTimeoutSignal(timeoutMs);
+        try {
+          const resp = await this.client.chat.completions.create(
+            {
+              model,
+              messages,
+              temperature: options?.temperature ?? 0.7,
+              max_tokens: options?.maxTokens ?? 4096,
+            },
+            { signal: timeout.signal }
+          );
+          timeout.clear();
+          return resp;
+        } finally {
+          timeout.clear();
+        }
+      }, `complete(${model})`);
 
-        const inputTokens = response.usage?.prompt_tokens ?? 0;
-        const outputTokens = response.usage?.completion_tokens ?? 0;
-        const totalTokens = inputTokens + outputTokens;
-        const costUnits = this.calculateCost(model, totalTokens);
+      const inputTokens = response.usage?.prompt_tokens ?? 0;
+      const outputTokens = response.usage?.completion_tokens ?? 0;
+      const totalTokens = inputTokens + outputTokens;
+      const costUnits = this.calculateCost(model, totalTokens);
 
-        this.totalTokens += totalTokens;
-        this.totalCostUnits += costUnits;
+      this.totalTokens += totalTokens;
+      this.totalCostUnits += costUnits;
 
-        return {
-          text: response.choices[0]?.message?.content ?? '',
-          meta: {
-            model,
-            tier,
-            inputTokens,
-            outputTokens,
-            totalTokens,
-            costUnits,
-            durationMs: Date.now() - start,
-          },
-        };
-      } finally {
-        timeout.clear();
-      }
+      return {
+        text: response.choices[0]?.message?.content ?? '',
+        meta: {
+          model,
+          tier,
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          costUnits,
+          durationMs: Date.now() - start,
+        },
+      };
     } catch (err) {
       // Try fallback on error (unless already on fallback)
       if (tier !== 'fallback' && this.models.fallback) {
@@ -495,58 +542,60 @@ export class LLMRouterImpl implements LLMRouter {
     const timeoutMs = this.getTimeoutForTier(tier);
 
     try {
-      const timeout = createTimeoutSignal(timeoutMs);
-      try {
-        const response = await this.client.chat.completions.create(
-          {
-            model,
-            messages,
-            temperature: options?.temperature ?? 0.3,
-            max_tokens: options?.maxTokens ?? 4096,
-            response_format: { type: 'json_object' },
-          },
-          { signal: timeout.signal }
-        );
-        timeout.clear();
-
-        const inputTokens = response.usage?.prompt_tokens ?? 0;
-        const outputTokens = response.usage?.completion_tokens ?? 0;
-        const totalTokens = inputTokens + outputTokens;
-        const costUnits = this.calculateCost(model, totalTokens);
-
-        this.totalTokens += totalTokens;
-        this.totalCostUnits += costUnits;
-
-        const text = response.choices[0]?.message?.content ?? '{}';
-        let parsed: T;
+      const response = await withRetry(async () => {
+        const timeout = createTimeoutSignal(timeoutMs);
         try {
-          parsed = JSON.parse(text) as T;
-        } catch (parseErr) {
-          console.error(`[LLM] JSON parse error for model ${model}. Raw: ${text.slice(0, 500)}`);
-          // Try to extract JSON from the response
-          const jsonMatch = text.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            parsed = JSON.parse(jsonMatch[0]) as T;
-          } else {
-            throw new Error(`LLM returned invalid JSON: ${text.slice(0, 200)}`);
-          }
+          const resp = await this.client.chat.completions.create(
+            {
+              model,
+              messages,
+              temperature: options?.temperature ?? 0.3,
+              max_tokens: options?.maxTokens ?? 4096,
+              response_format: { type: 'json_object' },
+            },
+            { signal: timeout.signal }
+          );
+          timeout.clear();
+          return resp;
+        } finally {
+          timeout.clear();
         }
+      }, `completeJSON(${model})`);
 
-        return {
-          data: parsed,
-          meta: {
-            model,
-            tier,
-            inputTokens,
-            outputTokens,
-            totalTokens,
-            costUnits,
-            durationMs: Date.now() - start,
-          },
-        };
-      } finally {
-        timeout.clear();
+      const inputTokens = response.usage?.prompt_tokens ?? 0;
+      const outputTokens = response.usage?.completion_tokens ?? 0;
+      const totalTokens = inputTokens + outputTokens;
+      const costUnits = this.calculateCost(model, totalTokens);
+
+      this.totalTokens += totalTokens;
+      this.totalCostUnits += costUnits;
+
+      const text = response.choices[0]?.message?.content ?? '{}';
+      let parsed: T;
+      try {
+        parsed = JSON.parse(text) as T;
+      } catch (parseErr) {
+        console.error(`[LLM] JSON parse error for model ${model}. Raw: ${text.slice(0, 500)}`);
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]) as T;
+        } else {
+          throw new Error(`LLM returned invalid JSON: ${text.slice(0, 200)}`);
+        }
       }
+
+      return {
+        data: parsed,
+        meta: {
+          model,
+          tier,
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          costUnits,
+          durationMs: Date.now() - start,
+        },
+      };
     } catch (err) {
       // Try fallback
       if (tier !== 'fallback' && this.models.fallback) {

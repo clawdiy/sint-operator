@@ -124,13 +124,15 @@ Respond ONLY with valid JSON:
     });
 
     // Store analysis in memory for brand learning
+    const themes = Array.isArray(result.data.themes) ? result.data.themes : [];
+    const hooks = Array.isArray(result.data.hooks) ? result.data.hooks : [];
     await ctx.memory.store(
       'content_analysis',
       `analysis-${Date.now()}`,
-      result.data.summary,
+      result.data.summary ?? '',
       {
-        themes: result.data.themes.map(t => t.name),
-        hookCount: result.data.hooks.length,
+        themes: themes.map(t => t.name),
+        hookCount: hooks.length,
         platforms,
       }
     );

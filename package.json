@@ -1,7 +1,7 @@
 {
   "name": "@sint/marketing-operator",
   "version": "0.4.0",
-  "description": "SINT Marketing Agent Operator \u2014 Upload one asset, get dozens of platform-ready deliverables",
+  "description": "SINT Marketing Agent Operator — Upload one asset, get dozens of platform-ready deliverables",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -23,6 +23,7 @@
     "commander": "^12.1.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
+    "express-rate-limit": "^8.2.1",
     "fluent-ffmpeg": "^2.1.3",
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
@@ -40,6 +41,7 @@
     "@types/better-sqlite3": "^7.6.8",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/express-rate-limit": "^5.1.3",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/js-yaml": "^4.0.9",
     "@types/jsonwebtoken": "^9.0.7",
