@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import multer from 'multer';
 import type { Orchestrator } from '../orchestrator/index.js';
+import { createPublishRoutes } from './publish-routes.js';
 
 // ─── Async Run Store ──────────────────────────────────────────
 
@@ -166,6 +167,9 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   }));
 
   app.use(express.json({ limit: '50mb' }));
+  
+  // ─── Publish Routes ──────────────────────────────────────
+  app.use("/api/publish", createPublishRoutes());
 
   const upload = multer({ dest: '/tmp/sint-uploads/' });
 

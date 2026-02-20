@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'lane/*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      
+      - run: npm ci
+      
+      - run: npx tsc --noEmit
+        name: Type Check
+      
+      - run: npm run build
+        name: Build
+      
+      - run: npm test -- --run
+        name: Test
+      
+      - name: Check UI build
+        run: |
+          npm run ui:build
+          test -f src/ui/dist/index.html || (echo "UI build missing index.html" && exit 1)

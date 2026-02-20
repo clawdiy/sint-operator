@@ -98,6 +98,7 @@ export interface PlatformConstraints {
 // ─── Brand Types ──────────────────────────────────────────────
 
 export interface BrandProfile {
+  owner_id?: string;
   id: string;
   name: string;
   voice: BrandVoice;
