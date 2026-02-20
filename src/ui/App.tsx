@@ -7,6 +7,8 @@ import Results from './components/Results';
 import Assets from './components/Assets';
 import Usage from './components/Usage';
 import Skills from './components/Skills';
+import ErrorBoundary from './components/ErrorBoundary';
+import { ToastProvider } from './components/Toast';
 
 type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills';
 
@@ -44,8 +46,12 @@ export default function App() {
   };
 
   return (
-    <Layout currentPage={page} onNavigate={navigate}>
-      {renderPage()}
-    </Layout>
+    <ToastProvider>
+      <ErrorBoundary>
+        <Layout currentPage={page} onNavigate={navigate}>
+          {renderPage()}
+        </Layout>
+      </ErrorBoundary>
+    </ToastProvider>
   );
 }

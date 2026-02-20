@@ -1,14 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { getUsage, getCurrentUsage } from '../api';
+import Spinner from './Spinner';
 
 export default function Usage() {
+  const [loading, setLoading] = useState(true);
   const [usage, setUsage] = useState<any>(null);
   const [current, setCurrent] = useState<any>(null);
   const [days, setDays] = useState(30);
 
   useEffect(() => {
-    getUsage(days).then(setUsage).catch(() => {});
-    getCurrentUsage().then(setCurrent).catch(() => {});
+    Promise.all([
+      getUsage(days).catch(() => null),
+      getCurrentUsage().catch(() => null),
+    ]).then(([u, c]) => {
+      setUsage(u);
+      setCurrent(c);
+      setLoading(false);
+    });
   }, [days]);
 
   const maxTokens = usage?.byModel
@@ -19,12 +27,15 @@ export default function Usage() {
     ? Math.max(1, ...Object.values(usage.byPipeline).map((v: any) => v.costUnits))
     : 1;
 
+  if (loading) return <Spinner text="Loading usage data..." />;
+
   return (
     <div className="page">
       <h1>Usage & Metering</h1>
+      <p className="subtitle">Track token consumption, costs, and pipeline activity.</p>
 
       <div className="toolbar">
-        <select value={days} onChange={e => setDays(Number(e.target.value))}>
+        <select value={days} onChange={e => { setDays(Number(e.target.value)); setLoading(true); }}>
           <option value={7}>Last 7 days</option>
           <option value={14}>Last 14 days</option>
           <option value={30}>Last 30 days</option>
@@ -36,18 +47,21 @@ export default function Usage() {
       {usage && (
         <div className="card-grid">
           <div className="card stat-card">
+            <div className="stat-icon">🏃</div>
             <div className="stat-body">
               <div className="stat-value">{usage.totalRuns}</div>
               <div className="stat-label">Total Runs</div>
             </div>
           </div>
           <div className="card stat-card">
+            <div className="stat-icon">🪙</div>
             <div className="stat-body">
               <div className="stat-value">{(usage.totalTokens ?? 0).toLocaleString()}</div>
               <div className="stat-label">Tokens Used</div>
             </div>
           </div>
           <div className="card stat-card">
+            <div className="stat-icon">💰</div>
             <div className="stat-body">
               <div className="stat-value">{(usage.totalCostUnits ?? 0).toFixed(1)}</div>
               <div className="stat-label">Cost Units</div>
@@ -70,7 +84,7 @@ export default function Usage() {
                     style={{ width: `${(data.tokens / maxTokens) * 100}%` }}
                   />
                 </div>
-                <div className="bar-value">{data.tokens.toLocaleString()} tokens</div>
+                <div className="bar-value">{data.tokens.toLocaleString()} tok</div>
               </div>
             ))}
           </div>
@@ -110,8 +124,8 @@ export default function Usage() {
               {Object.entries(usage.byBrand).map(([brand, data]: [string, any]) => (
                 <tr key={brand}>
                   <td>{brand}</td>
-                  <td>{data.runs}</td>
-                  <td>{data.costUnits.toFixed(1)}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{data.runs}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{data.costUnits.toFixed(1)}</td>
                 </tr>
               ))}
             </tbody>
@@ -123,7 +137,19 @@ export default function Usage() {
       {current && (
         <div className="card">
           <h3>Current Session</h3>
-          <pre>{JSON.stringify(current, null, 2)}</pre>
+          <div className="result-box">
+            <pre>{JSON.stringify(current, null, 2)}</pre>
+          </div>
+        </div>
+      )}
+
+      {!usage && (
+        <div className="card">
+          <div className="empty-state">
+            <div className="empty-icon">📈</div>
+            <div className="empty-title">No usage data yet</div>
+            <div className="empty-desc">Run some pipelines and usage statistics will appear here.</div>
+          </div>
         </div>
       )}
     </div>

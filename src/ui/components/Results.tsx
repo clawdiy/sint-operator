@@ -1,38 +1,116 @@
 import React, { useEffect, useState } from 'react';
 import { getRuns, getRun } from '../api';
+import { useToast } from './Toast';
+import Spinner from './Spinner';
+
+const PLATFORM_LIMITS: Record<string, number> = {
+  twitter: 280, threads: 500, instagram: 2200, linkedin: 3000,
+  facebook: 63206, tiktok: 2200, blog: 50000,
+};
+
+const PLATFORM_ICONS: Record<string, string> = {
+  twitter: '𝕏', linkedin: '💼', instagram: '📸', facebook: '👥',
+  threads: '🧵', tiktok: '🎵', blog: '📝', email: '✉️',
+};
 
 export default function Results() {
+  const { addToast } = useToast();
+  const [loading, setLoading] = useState(true);
   const [runs, setRuns] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('');
   const [copiedId, setCopiedId] = useState('');
 
   useEffect(() => {
-    getRuns().then(r => setRuns(Array.isArray(r) ? r : [])).catch(() => {});
+    getRuns()
+      .then(r => { setRuns(Array.isArray(r) ? r : []); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
   const viewRun = async (id: string) => {
     try {
       const run = await getRun(id);
       setSelected(run);
-    } catch { }
+      if (run.outputs && run.outputs.length > 0) {
+        setActiveTab(run.outputs[0].platform || 'all');
+      }
+    } catch {
+      addToast('error', 'Failed to load run details');
+    }
   };
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
+    addToast('success', 'Copied to clipboard!');
     setTimeout(() => setCopiedId(''), 2000);
   };
+
+  const extractHashtags = (content: string): string[] => {
+    const matches = content.match(/#[\w]+/g);
+    return matches ? [...new Set(matches)] : [];
+  };
+
+  const getPlatforms = (): string[] => {
+    if (!selected?.outputs) return [];
+    const platforms = selected.outputs.map((o: any) => o.platform).filter(Boolean);
+    return [...new Set(platforms)] as string[];
+  };
+
+  const getFilteredOutputs = () => {
+    if (!selected?.outputs) return [];
+    if (!activeTab || activeTab === 'all') return selected.outputs;
+    return selected.outputs.filter((o: any) => o.platform === activeTab);
+  };
+
+  const exportMarkdown = () => {
+    if (!selected?.outputs) return;
+    let md = `# Pipeline Run: ${selected.pipelineId}\n\n`;
+    md += `**Brand:** ${selected.brandId}\n`;
+    md += `**Date:** ${new Date(selected.startedAt).toLocaleString()}\n\n---\n\n`;
+    selected.outputs.forEach((out: any, i: number) => {
+      md += `## ${out.platform || 'Output'} (${out.format || 'text'})\n\n`;
+      md += out.content + '\n\n---\n\n';
+    });
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selected.pipelineId}-${selected.id?.slice(0, 8)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addToast('success', 'Exported as Markdown');
+  };
+
+  const exportJSON = () => {
+    if (!selected) return;
+    const blob = new Blob([JSON.stringify(selected, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selected.pipelineId}-${selected.id?.slice(0, 8)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addToast('success', 'Exported as JSON');
+  };
+
+  if (loading) return <Spinner text="Loading results..." />;
 
   return (
     <div className="page">
       <h1>Results</h1>
+      <p className="subtitle">View and export generated content from pipeline runs.</p>
 
       <div className="two-col">
         {/* Run List */}
         <div className="card">
           <h3>Pipeline Runs</h3>
           {runs.length === 0 ? (
-            <p className="empty-state">No runs yet.</p>
+            <div className="empty-state">
+              <div className="empty-icon">📋</div>
+              <div className="empty-title">No runs yet</div>
+              <div className="empty-desc">Run a pipeline from the Dashboard to see results here.</div>
+            </div>
           ) : (
             <ul className="pipeline-list">
               {runs.map(r => (
@@ -43,7 +121,10 @@ export default function Results() {
                 >
                   <strong>{r.pipelineId}</strong>
                   <span className="pipeline-desc">
-                    <span className={`badge badge-${r.status}`}>{r.status}</span>
+                    <span className={`badge badge-${r.status}`}>
+                      <span className="badge-dot" />
+                      {r.status}
+                    </span>
                     {' '}{new Date(r.startedAt).toLocaleString()}
                   </span>
                 </li>
@@ -60,33 +141,92 @@ export default function Results() {
               <div className="meta-row">
                 <span>Pipeline: <strong>{selected.pipelineId}</strong></span>
                 <span>Brand: <strong>{selected.brandId}</strong></span>
-                <span>Status: <span className={`badge badge-${selected.status}`}>{selected.status}</span></span>
+                <span>Status: <span className={`badge badge-${selected.status}`}><span className="badge-dot" />{selected.status}</span></span>
               </div>
 
-              {/* Outputs */}
+              {/* Export Bar */}
+              {selected.outputs && selected.outputs.length > 0 && (
+                <div className="export-bar">
+                  <span className="export-bar-label">Export Results</span>
+                  <button className="btn small" onClick={exportMarkdown}>📄 Markdown</button>
+                  <button className="btn small" onClick={exportJSON}>📦 JSON</button>
+                </div>
+              )}
+
+              {/* Running progress */}
+              {selected.status === 'running' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Pipeline running...</div>
+                  <div className="progress-bar"><div className="progress-bar-fill" /></div>
+                </div>
+              )}
+
+              {/* Platform Tabs */}
               {selected.outputs && selected.outputs.length > 0 && (
                 <>
-                  <h4>Generated Outputs</h4>
-                  {selected.outputs.map((out: any, i: number) => (
-                    <div key={i} className="output-card">
-                      <div className="output-header">
-                        <span className="badge">{out.platform}</span>
-                        <span className="badge">{out.format}</span>
-                        <button
-                          className="btn small"
-                          onClick={() => copyToClipboard(out.content, `out-${i}`)}
-                        >
-                          {copiedId === `out-${i}` ? '✅ Copied!' : '📋 Copy'}
-                        </button>
+                  <div className="platform-tabs">
+                    {getPlatforms().length > 1 && (
+                      <button
+                        className={`platform-tab ${activeTab === 'all' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('all')}
+                      >
+                        All
+                      </button>
+                    )}
+                    {getPlatforms().map(platform => (
+                      <button
+                        key={platform}
+                        className={`platform-tab ${activeTab === platform ? 'active' : ''}`}
+                        onClick={() => setActiveTab(platform)}
+                      >
+                        {PLATFORM_ICONS[platform] || '📄'} {platform}
+                      </button>
+                    ))}
+                  </div>
+
+                  {getFilteredOutputs().map((out: any, i: number) => {
+                    const limit = PLATFORM_LIMITS[out.platform] || 0;
+                    const charCount = (out.content || '').length;
+                    const isOver = limit > 0 && charCount > limit;
+                    const hashtags = extractHashtags(out.content || '');
+
+                    return (
+                      <div key={i} className="platform-content-card">
+                        <div className="platform-content-header">
+                          <div className="platform-content-header-left">
+                            <span className="badge">{PLATFORM_ICONS[out.platform] || '📄'} {out.platform}</span>
+                            {out.format && <span className="badge">{out.format}</span>}
+                          </div>
+                          <div className="platform-content-header-right">
+                            {limit > 0 && (
+                              <span className={`char-count ${isOver ? 'over' : 'ok'}`}>
+                                {charCount}/{limit}
+                              </span>
+                            )}
+                            <button
+                              className={`btn small copy-btn ${copiedId === `out-${i}` ? 'copied' : ''}`}
+                              onClick={() => copyToClipboard(out.content, `out-${i}`)}
+                            >
+                              {copiedId === `out-${i}` ? '✅ Copied!' : '📋 Copy'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="platform-content-body">{out.content}</div>
+                        {hashtags.length > 0 && (
+                          <div className="hashtags">
+                            {hashtags.map(tag => (
+                              <span key={tag} className="hashtag">{tag}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <pre className="output-content">{out.content}</pre>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
 
               {/* Steps */}
-              {selected.steps && (
+              {selected.steps && selected.steps.length > 0 && (
                 <>
                   <h4>Steps</h4>
                   <table className="table">
@@ -97,10 +237,10 @@ export default function Results() {
                       {selected.steps.map((s: any) => (
                         <tr key={s.stepId}>
                           <td>{s.stepId}</td>
-                          <td><span className={`badge badge-${s.status}`}>{s.status}</span></td>
-                          <td>{s.modelUsed ?? '—'}</td>
-                          <td>{s.tokensUsed?.toLocaleString() ?? '—'}</td>
-                          <td>{s.durationMs ? `${(s.durationMs / 1000).toFixed(1)}s` : '—'}</td>
+                          <td><span className={`badge badge-${s.status}`}><span className="badge-dot" />{s.status}</span></td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{s.modelUsed ?? '—'}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{s.tokensUsed?.toLocaleString() ?? '—'}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{s.durationMs ? `${(s.durationMs / 1000).toFixed(1)}s` : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -108,11 +248,11 @@ export default function Results() {
                 </>
               )}
 
-              {/* Full JSON */}
-              <div className="result-box">
+              {/* Raw JSON */}
+              <div className="result-box" style={{ marginTop: '20px' }}>
                 <div className="result-header">
-                  <h4>Raw JSON</h4>
-                  <button className="btn small" onClick={() => copyToClipboard(JSON.stringify(selected, null, 2), 'raw')}>
+                  <h4 style={{ margin: 0 }}>Raw JSON</h4>
+                  <button className={`btn small copy-btn ${copiedId === 'raw' ? 'copied' : ''}`} onClick={() => copyToClipboard(JSON.stringify(selected, null, 2), 'raw')}>
                     {copiedId === 'raw' ? '✅ Copied!' : '📋 Copy'}
                   </button>
                 </div>
@@ -120,7 +260,11 @@ export default function Results() {
               </div>
             </>
           ) : (
-            <p className="empty-state">Select a run to view outputs.</p>
+            <div className="empty-state">
+              <div className="empty-icon">👈</div>
+              <div className="empty-title">Select a run</div>
+              <div className="empty-desc">Click on a pipeline run to view its generated outputs.</div>
+            </div>
           )}
         </div>
       </div>

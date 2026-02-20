@@ -3,10 +3,10 @@ import React from 'react';
 type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills';
 
 const NAV_ITEMS: { page: Page; icon: string; label: string }[] = [
-  { page: 'dashboard', icon: '📊', label: 'Dashboard' },
+  { page: 'dashboard', icon: '🏠', label: 'Dashboard' },
   { page: 'pipelines', icon: '⚡', label: 'Pipelines' },
-  { page: 'brands', icon: '🏢', label: 'Brands' },
-  { page: 'results', icon: '📋', label: 'Results' },
+  { page: 'brands', icon: '🎨', label: 'Brands' },
+  { page: 'results', icon: '📊', label: 'Results' },
   { page: 'assets', icon: '📁', label: 'Assets' },
   { page: 'usage', icon: '📈', label: 'Usage' },
   { page: 'skills', icon: '🧩', label: 'Skills' },
