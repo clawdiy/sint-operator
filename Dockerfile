@@ -25,7 +25,6 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/ui/dist ./dist/ui-static
 COPY config ./config
-COPY pipelines ./pipelines
 
 EXPOSE 18789
 
