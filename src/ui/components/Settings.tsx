@@ -8,6 +8,29 @@ interface ApiKeyState {
   value: string;
 }
 
+function SystemInfo() {
+  const [info, setInfo] = React.useState<any>(null);
+  React.useEffect(() => {
+    fetch('/health').then(r => r.json()).then(setInfo).catch(() => {});
+  }, []);
+  return (
+    <>
+      <h2>System Info</h2>
+      <div className="card" style={{ padding: 24 }}>
+        <table className="table">
+          <tbody>
+            <tr><td style={{ color: 'var(--text-muted)', width: 140 }}>Version</td><td>{info?.version ? 'v' + info.version : '...'}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>Skills</td><td>{info?.skills ?? '...'}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>Pipelines</td><td>{info?.pipelines ?? '...'}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>Brands</td><td>{info?.brands ?? '...'}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>Status</td><td style={{ color: info?.status === 'ok' ? 'var(--success)' : 'var(--text-muted)' }}>{info?.status === 'ok' ? '● Healthy' : '...'}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 export default function Settings() {
   const { addToast } = useToast();
   const [openai, setOpenai] = useState<ApiKeyState>({ masked: null, loading: true, saving: false, value: '' });
@@ -145,17 +168,7 @@ export default function Settings() {
         setAnthropic
       )}
 
-      <h2>System Info</h2>
-      <div className="card" style={{ padding: 24 }}>
-        <table className="table">
-          <tbody>
-            <tr><td style={{ color: 'var(--text-muted)', width: 140 }}>Version</td><td>v0.5.0</td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Skills</td><td>15</td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Pipelines</td><td>7</td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Auth</td><td>{process.env.AUTH_ENABLED === 'true' ? 'Enabled' : 'Open (no auth)'}</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <SystemInfo />
     </div>
   );
 }
