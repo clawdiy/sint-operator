@@ -191,7 +191,7 @@ Respond with JSON:
     });
 
     return {
-      output: result.data,
+      output: { ...result.data } as Record<string, unknown>,
       tokensUsed: result.meta.totalTokens,
       costUnits: result.meta.costUnits,
       modelUsed: result.meta.model,

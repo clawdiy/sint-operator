@@ -6,6 +6,9 @@
  */
 
 import express from 'express';
+import { join, dirname } from 'path';
+import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import multer from 'multer';
 import type { Orchestrator } from '../orchestrator/index.js';
@@ -169,6 +172,26 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
   });
+
+  // ─── Serve UI ────────────────────────────────────────
+
+  // Serve built UI from src/ui/dist/
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const uiDistPath = join(__dirname, '..', 'ui', 'dist');
+  const uiDistPathAlt = join(__dirname, '..', '..', 'src', 'ui', 'dist');
+  
+  const uiPath = existsSync(uiDistPath) ? uiDistPath : existsSync(uiDistPathAlt) ? uiDistPathAlt : null;
+  if (uiPath) {
+    app.use(express.static(uiPath));
+    // SPA fallback — serve index.html for non-API routes
+    app.get('*', (req, res) => {
+      if (!req.path.startsWith('/api') && !req.path.startsWith('/health')) {
+        res.sendFile(join(uiPath, 'index.html'));
+      }
+    });
+    console.log('   UI:       http://localhost:' + port + '/');
+  }
 
   // ─── Start ──────────────────────────────────────────────
 

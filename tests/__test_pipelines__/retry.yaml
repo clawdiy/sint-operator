@@ -1,0 +1,22 @@
+id: test-retry
+name: Retry Test Pipeline
+description: A pipeline with retry logic
+version: '1.0'
+trigger:
+  type: manual
+  pattern: retry|resilient
+inputs:
+  - name: text
+    type: string
+    required: true
+steps:
+  - id: step1
+    skill: mock-skill-retry
+    action: Retryable step
+    inputs:
+      text: ${inputs.text}
+    retry:
+      max: 3
+      backoff: linear
+    output: result
+outputs: []

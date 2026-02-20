@@ -1,5 +1,5 @@
 /**
- * SINT Pipeline Engine v2
+ * SINT Pipeline Engine v3
  * 
  * YAML-based deterministic pipeline execution with:
  * - Step chaining via $ref variables
@@ -8,6 +8,9 @@
  * - Model tier routing per step
  * - Metering integration
  * - Audit trail
+ * - Parallel step execution (Promise.all with concurrency limit)
+ * - Batch processing (count field)
+ * - Pipeline trigger matching (regex patterns)
  */
 
 import { readFileSync, readdirSync } from 'fs';
@@ -21,6 +24,10 @@ import type {
 } from '../types.js';
 import { getSkill } from '../skills/registry.js';
 import type { MeteringTracker } from '../metering/tracker.js';
+
+// ─── Constants ────────────────────────────────────────────────
+
+const PARALLEL_CONCURRENCY_LIMIT = 5;
 
 // ─── Pipeline Registry ────────────────────────────────────────
 
@@ -56,6 +63,76 @@ export function getRun(id: string): PipelineRun | undefined {
 
 export function listRuns(): PipelineRun[] {
   return Array.from(runs.values());
+}
+
+// ─── Pipeline Trigger Matching ────────────────────────────────
+
+export interface TriggerMatch {
+  pipeline: PipelineDefinition;
+  score: number;
+  matchedPattern: string;
+}
+
+/**
+ * Match user input against pipeline trigger patterns.
+ * Returns the best matching pipeline, or undefined if no match.
+ */
+export function matchPipeline(input: string): TriggerMatch | undefined {
+  const matches: TriggerMatch[] = [];
+
+  for (const pipeline of pipelines.values()) {
+    if (!pipeline.trigger?.pattern) continue;
+
+    try {
+      const regex = new RegExp(pipeline.trigger.pattern, 'i');
+      const match = regex.exec(input);
+      if (match) {
+        // Score based on match specificity: longer matches = higher score
+        const score = match[0].length / input.length + (match[0].length / pipeline.trigger.pattern.length) * 0.5;
+        matches.push({
+          pipeline,
+          score,
+          matchedPattern: pipeline.trigger.pattern,
+        });
+      }
+    } catch {
+      // Invalid regex, skip
+    }
+  }
+
+  if (matches.length === 0) return undefined;
+
+  // Return the best match (highest score)
+  matches.sort((a, b) => b.score - a.score);
+  return matches[0];
+}
+
+/**
+ * Match all pipelines against input. Returns all matches sorted by score.
+ */
+export function matchAllPipelines(input: string): TriggerMatch[] {
+  const matches: TriggerMatch[] = [];
+
+  for (const pipeline of pipelines.values()) {
+    if (!pipeline.trigger?.pattern) continue;
+
+    try {
+      const regex = new RegExp(pipeline.trigger.pattern, 'i');
+      const match = regex.exec(input);
+      if (match) {
+        const score = match[0].length / input.length + (match[0].length / pipeline.trigger.pattern.length) * 0.5;
+        matches.push({
+          pipeline,
+          score,
+          matchedPattern: pipeline.trigger.pattern,
+        });
+      }
+    } catch {
+      // Invalid regex, skip
+    }
+  }
+
+  return matches.sort((a, b) => b.score - a.score);
 }
 
 // ─── Pipeline Executor ────────────────────────────────────────
@@ -126,52 +203,111 @@ export async function executePipeline(opts: ExecuteOptions): Promise<PipelineRun
         }
       }
 
-      const stepRun = await executeStep(step, {
-        variables,
-        brand: opts.brand,
-        llm: opts.llm,
-        tools: opts.tools,
-        memory: opts.memory,
-        logger: opts.logger,
-        metering: opts.metering,
-        runId: run.id,
-        pipelineId: pipeline.id,
-        brandId: opts.brandId,
-      });
+      // Check for parallel execution or batch count
+      const stepConfig = step.config ?? {};
+      const isParallel = stepConfig.parallel === true;
+      const count = typeof stepConfig.count === 'number' ? stepConfig.count : 0;
 
-      run.steps.push(stepRun);
+      let stepRuns: StepRun[];
 
-      // Store step output in variables using the output name
-      if (stepRun.status === 'completed' && stepRun.output !== undefined) {
-        variables.set(`$${step.output}`, stepRun.output);
-        // Also store nested values
-        if (typeof stepRun.output === 'object' && stepRun.output !== null) {
-          for (const [k, v] of Object.entries(stepRun.output as Record<string, unknown>)) {
-            variables.set(`$${step.output}.${k}`, v);
+      if (isParallel && count > 1) {
+        // Batch parallel execution: run the skill `count` times concurrently
+        stepRuns = await executeStepParallel(step, count, {
+          variables,
+          brand: opts.brand,
+          llm: opts.llm,
+          tools: opts.tools,
+          memory: opts.memory,
+          logger: opts.logger,
+          metering: opts.metering,
+          runId: run.id,
+          pipelineId: pipeline.id,
+          brandId: opts.brandId,
+        });
+      } else if (count > 1) {
+        // Sequential batch execution
+        stepRuns = [];
+        for (let i = 0; i < count; i++) {
+          const indexedStep = injectIndex(step, i);
+          const sr = await executeStep(indexedStep, {
+            variables,
+            brand: opts.brand,
+            llm: opts.llm,
+            tools: opts.tools,
+            memory: opts.memory,
+            logger: opts.logger,
+            metering: opts.metering,
+            runId: run.id,
+            pipelineId: pipeline.id,
+            brandId: opts.brandId,
+          });
+          stepRuns.push(sr);
+        }
+      } else {
+        // Single step execution (normal path)
+        const sr = await executeStep(step, {
+          variables,
+          brand: opts.brand,
+          llm: opts.llm,
+          tools: opts.tools,
+          memory: opts.memory,
+          logger: opts.logger,
+          metering: opts.metering,
+          runId: run.id,
+          pipelineId: pipeline.id,
+          brandId: opts.brandId,
+        });
+        stepRuns = [sr];
+      }
+
+      // Process results
+      for (const stepRun of stepRuns) {
+        run.steps.push(stepRun);
+
+        // Update metering
+        if (stepRun.tokensUsed) {
+          run.metering.totalTokens += stepRun.tokensUsed;
+        }
+        if (stepRun.costUnits) {
+          run.metering.totalCostUnits += stepRun.costUnits;
+        }
+        if (stepRun.modelUsed) {
+          if (!run.metering.modelBreakdown[stepRun.modelUsed]) {
+            run.metering.modelBreakdown[stepRun.modelUsed] = { tokens: 0, costUnits: 0 };
+          }
+          run.metering.modelBreakdown[stepRun.modelUsed].tokens += stepRun.tokensUsed ?? 0;
+          run.metering.modelBreakdown[stepRun.modelUsed].costUnits += stepRun.costUnits ?? 0;
+        }
+
+        opts.onStepComplete?.(stepRun);
+      }
+
+      // Store step output in variables
+      if (count > 1 || isParallel) {
+        // For batch/parallel steps, collect all outputs into an array
+        const outputs = stepRuns
+          .filter(sr => sr.status === 'completed' && sr.output !== undefined)
+          .map(sr => sr.output);
+        variables.set(`$${step.output}`, outputs);
+      } else {
+        // Single step output
+        const stepRun = stepRuns[0];
+        if (stepRun.status === 'completed' && stepRun.output !== undefined) {
+          variables.set(`$${step.output}`, stepRun.output);
+          // Also store nested values
+          if (typeof stepRun.output === 'object' && stepRun.output !== null) {
+            for (const [k, v] of Object.entries(stepRun.output as Record<string, unknown>)) {
+              variables.set(`$${step.output}.${k}`, v);
+            }
           }
         }
       }
 
-      // Update metering
-      if (stepRun.tokensUsed) {
-        run.metering.totalTokens += stepRun.tokensUsed;
-      }
-      if (stepRun.costUnits) {
-        run.metering.totalCostUnits += stepRun.costUnits;
-      }
-      if (stepRun.modelUsed) {
-        if (!run.metering.modelBreakdown[stepRun.modelUsed]) {
-          run.metering.modelBreakdown[stepRun.modelUsed] = { tokens: 0, costUnits: 0 };
-        }
-        run.metering.modelBreakdown[stepRun.modelUsed].tokens += stepRun.tokensUsed ?? 0;
-        run.metering.modelBreakdown[stepRun.modelUsed].costUnits += stepRun.costUnits ?? 0;
-      }
-
-      opts.onStepComplete?.(stepRun);
-
-      if (stepRun.status === 'failed') {
+      // Check for any failures
+      const failed = stepRuns.find(sr => sr.status === 'failed');
+      if (failed) {
         run.status = 'failed';
-        run.error = `Step "${step.id}" failed: ${stepRun.error}`;
+        run.error = `Step "${step.id}" failed: ${failed.error}`;
         break;
       }
     }
@@ -211,6 +347,42 @@ interface StepContext {
   runId: string;
   pipelineId: string;
   brandId: string;
+}
+
+/**
+ * Execute a step in parallel `count` times with a concurrency limit.
+ */
+async function executeStepParallel(
+  step: PipelineStep,
+  count: number,
+  ctx: StepContext
+): Promise<StepRun[]> {
+  ctx.logger.info(`Parallel execution: ${step.id} x${count} (concurrency: ${PARALLEL_CONCURRENCY_LIMIT})`);
+
+  const results: StepRun[] = [];
+  const queue: Array<() => Promise<StepRun>> = [];
+
+  for (let i = 0; i < count; i++) {
+    const indexedStep = injectIndex(step, i);
+    queue.push(() => executeStep(indexedStep, ctx));
+  }
+
+  // Process with concurrency limit
+  for (let i = 0; i < queue.length; i += PARALLEL_CONCURRENCY_LIMIT) {
+    const batch = queue.slice(i, i + PARALLEL_CONCURRENCY_LIMIT);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    results.push(...batchResults);
+  }
+
+  return results;
+}
+
+/**
+ * Create a copy of a step with the index injected into inputs.
+ */
+function injectIndex(step: PipelineStep, index: number): PipelineStep {
+  const inputs = { ...step.inputs, _index: String(index) };
+  return { ...step, inputs, id: `${step.id}[${index}]` };
 }
 
 async function executeStep(step: PipelineStep, ctx: StepContext): Promise<StepRun> {
@@ -302,7 +474,7 @@ async function executeStep(step: PipelineStep, ctx: StepContext): Promise<StepRu
 
 // ─── Variable Resolution ──────────────────────────────────────
 
-function resolveInputs(
+export function resolveInputs(
   inputs: Record<string, unknown>,
   variables: Map<string, unknown>
 ): Record<string, unknown> {
@@ -315,14 +487,14 @@ function resolveInputs(
   return resolved;
 }
 
-function resolveValue(value: unknown, variables: Map<string, unknown>): unknown {
+export function resolveValue(value: unknown, variables: Map<string, unknown>): unknown {
   if (typeof value === 'string') {
     // $variable reference (direct)
     if (value.startsWith('$')) {
       return variables.get(value) ?? value;
     }
-    // ${path.to.value} template
-    if (value.startsWith('${') && value.endsWith('}')) {
+    // ${path.to.value} template (exact match — single expression)
+    if (value.startsWith('${') && value.endsWith('}') && !value.slice(2, -1).includes('${')) {
       const path = value.slice(2, -1);
       return variables.get(path) ?? variables.get(`$${path}`) ?? value;
     }
@@ -341,7 +513,7 @@ function resolveValue(value: unknown, variables: Map<string, unknown>): unknown 
   return value;
 }
 
-function evaluateCondition(condition: string, variables: Map<string, unknown>): boolean {
+export function evaluateCondition(condition: string, variables: Map<string, unknown>): boolean {
   try {
     const context = Object.fromEntries(variables);
     const fn = new Function('ctx', `with(ctx) { return !!(${condition}); }`);

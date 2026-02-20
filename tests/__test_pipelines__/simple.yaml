@@ -1,0 +1,19 @@
+id: test-simple
+name: Simple Test Pipeline
+description: A simple test pipeline
+version: '1.0'
+trigger:
+  type: manual
+  pattern: run simple|test simple
+inputs:
+  - name: text
+    type: string
+    required: true
+steps:
+  - id: step1
+    skill: mock-skill-a
+    action: Process text
+    inputs:
+      text: ${inputs.text}
+    output: processed
+outputs: []

@@ -1,0 +1,19 @@
+id: test-trigger-seo
+name: SEO Blog Pipeline
+description: Trigger test for SEO
+version: '1.0'
+trigger:
+  type: manual
+  pattern: seo.*blog|write.*blog.*post|blog.*about
+inputs:
+  - name: topic
+    type: string
+    required: true
+steps:
+  - id: step1
+    skill: mock-skill-a
+    action: Generate blog
+    inputs:
+      topic: ${inputs.topic}
+    output: blog
+outputs: []

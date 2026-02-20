@@ -8,7 +8,7 @@
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
-import type { MemoryService, MemoryResult, LLMService } from '../types.js';
+import type { MemoryService, MemoryResult, LLMRouter } from '../types.js';
 
 interface StoredEntry {
   id: string;
@@ -21,7 +21,7 @@ interface StoredEntry {
 
 export class MemoryStore implements MemoryService {
   private db: Database.Database;
-  private llm: LLMService | null = null;
+  private llm: LLMRouter | null = null;
   private embedCache = new Map<string, number[]>();
 
   constructor(dbPath: string) {
@@ -36,7 +36,7 @@ export class MemoryStore implements MemoryService {
     this.initialize();
   }
 
-  setLLM(llm: LLMService): void {
+  setLLM(llm: LLMRouter): void {
     this.llm = llm;
   }
 

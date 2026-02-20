@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
@@ -15,11 +17,25 @@
     "declarationMap": true,
     "sourceMap": true,
     "paths": {
-      "@core/*": ["./src/core/*"],
-      "@services/*": ["./src/services/*"],
-      "@skills/*": ["./src/skills/*"]
+      "@core/*": [
+        "./src/core/*"
+      ],
+      "@services/*": [
+        "./src/services/*"
+      ],
+      "@skills/*": [
+        "./src/skills/*"
+      ]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "data"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "data",
+    "src/ui",
+    "vite.config.ts"
+  ]
 }

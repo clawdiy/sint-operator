@@ -1,5 +1,5 @@
 /**
- * Marketing Orchestrator v2
+ * Marketing Orchestrator v3
  * 
  * Central coordination layer:
  * - Intelligent model routing (Opus/Sonnet/Kimi)
@@ -7,10 +7,11 @@
  * - Brand context injection
  * - Usage metering with hard stops
  * - Asset routing to platform-specific formats
+ * - Pipeline trigger matching
  */
 
 import { join } from 'path';
-import { loadPipelines, executePipeline, listPipelines, getPipeline, getRun, listRuns } from '../core/pipeline/engine.js';
+import { loadPipelines, executePipeline, listPipelines, getPipeline, getRun, listRuns, matchPipeline, matchAllPipelines } from '../core/pipeline/engine.js';
 import { loadBrands, getBrand, listBrands, saveBrand, createBrand } from '../core/brand/manager.js';
 import { ingestAsset, ingestText, ingestUrl, getAsset, listAssets } from '../core/assets/processor.js';
 import { registerSkill, discoverSkills, listSkillSummaries, getRegistrySize, getTokenEstimate } from '../core/skills/registry.js';
@@ -33,6 +34,7 @@ import { outputPackagerSkill } from '../skills/output-packager/index.js';
 import { brandResearcherSkill } from '../skills/brand-researcher/index.js';
 import { serpScraperSkill } from '../skills/serp-scraper/index.js';
 import { seoOptimizerSkill } from '../skills/seo-optimizer/index.js';
+import { notifierSkill } from '../skills/notifier/index.js';
 
 import type { BrandProfile, PipelineRun, Logger, ModelConfig } from '../core/types.js';
 
@@ -73,7 +75,7 @@ export class Orchestrator {
     // Initialize tools
     this.tools = createToolServices(config.openaiApiKey, config.openaiBaseUrl);
 
-    // Register built-in skills (12 total)
+    // Register built-in skills (13 total)
     registerSkill(assetIngesterSkill);
     registerSkill(contentAnalyzerSkill);
     registerSkill(contentRepurposeSkill);
@@ -86,6 +88,7 @@ export class Orchestrator {
     registerSkill(brandResearcherSkill);
     registerSkill(serpScraperSkill);
     registerSkill(seoOptimizerSkill);
+    registerSkill(notifierSkill);
 
     // Discover external skills (L1 — manifest only)
     discoverSkills(join(config.configDir, 'skills'));
@@ -135,6 +138,11 @@ export class Orchestrator {
       },
     });
   }
+
+  // ─── Pipeline Matching ────────────────────────────────────
+
+  matchPipeline(input: string) { return matchPipeline(input); }
+  matchAllPipelines(input: string) { return matchAllPipelines(input); }
 
   // ─── Quick Actions ────────────────────────────────────────
 

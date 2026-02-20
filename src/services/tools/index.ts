@@ -200,6 +200,7 @@ class BrowserServiceImpl implements BrowserService {
         return element ? await element.textContent() : '';
       }
 
+      // @ts-ignore - document exists in browser context
       return await page.evaluate(() => document.body.innerText);
     } finally {
       await page.close();
@@ -232,24 +233,27 @@ class BrowserServiceImpl implements BrowserService {
         timeout: 30000,
       });
 
-      return await page.evaluate(() => {
-        const results: Array<{ position: number; title: string; url: string; snippet: string }> = [];
-        const items = document.querySelectorAll('.g');
-        items.forEach((item, i) => {
-          const titleEl = item.querySelector('h3');
-          const linkEl = item.querySelector('a');
-          const snippetEl = item.querySelector('.VwiC3b');
-          if (titleEl && linkEl) {
-            results.push({
-              position: i + 1,
-              title: titleEl.textContent ?? '',
-              url: linkEl.getAttribute('href') ?? '',
-              snippet: snippetEl?.textContent ?? '',
-            });
-          }
-        });
-        return results.slice(0, 10);
-      });
+      // eslint-disable-next-line
+      return await page.evaluate(`
+        (() => {
+          const results = [];
+          const items = document.querySelectorAll('.g');
+          items.forEach((item, i) => {
+            const titleEl = item.querySelector('h3');
+            const linkEl = item.querySelector('a');
+            const snippetEl = item.querySelector('.VwiC3b');
+            if (titleEl && linkEl) {
+              results.push({
+                position: i + 1,
+                title: titleEl.textContent || '',
+                url: linkEl.getAttribute('href') || '',
+                snippet: snippetEl ? snippetEl.textContent || '' : '',
+              });
+            }
+          });
+          return results.slice(0, 10);
+        })()
+      `);
     } catch {
       return [];
     } finally {

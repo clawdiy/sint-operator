@@ -50,7 +50,7 @@ export const seoOptimizerSkill: Skill = {
     const blogDraft = ctx.inputs.blog_draft as Record<string, unknown>;
     const content = (blogDraft.content as string) ?? '';
     const title = (blogDraft.title as string) ?? '';
-    const keyword = (ctx.inputs.keyword as string) || (blogDraft.keyword as string) ?? '';
+    const keyword = (ctx.inputs.keyword as string) || ((blogDraft.keyword as string) ?? '');
 
     // Calculate keyword density locally
     const wordCount = content.split(/\s+/).length;

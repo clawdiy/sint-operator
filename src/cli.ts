@@ -20,7 +20,11 @@ function createOrchestrator(): Orchestrator {
     configDir: resolve(process.env.SINT_CONFIG_DIR ?? './config'),
     openaiApiKey: process.env.OPENAI_API_KEY ?? '',
     openaiBaseUrl: process.env.OPENAI_BASE_URL,
-    defaultModel: process.env.SINT_MODEL ?? 'gpt-4o',
+    models: {
+      complex: process.env.SINT_MODEL_COMPLEX ?? 'gpt-4o',
+      routine: process.env.SINT_MODEL_ROUTINE ?? 'gpt-4o-mini',
+      fallback: process.env.SINT_MODEL_FALLBACK ?? 'gpt-4o-mini',
+    },
   });
 }
 
