@@ -165,6 +165,10 @@ function maskApiKey(apiKey: string): string {
 function getRequestUser(req: express.Request, res: express.Response): { userId: string; email: string } | null {
   const user = (req as AuthenticatedRequest).user;
   if (!user?.userId) {
+    // When auth is disabled, use a default user
+    if (process.env.AUTH_ENABLED !== 'true') {
+      return { userId: 'default', email: 'admin@localhost' };
+    }
     res.status(401).json({ error: 'Unauthorized' });
     return null;
   }
@@ -387,6 +391,8 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
       const payload = apiKeySchema.parse(req.body ?? {});
       storeApiKey(user.userId, payload.apiKey);
+      // Also set as env var for LLM router
+      process.env.OPENAI_API_KEY = payload.apiKey;
       res.json({ success: true, masked: maskApiKey(payload.apiKey) });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -403,6 +409,11 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       if (!user) return;
 
       if (!hasApiKey(user.userId)) {
+        // Check env var as fallback
+        if (process.env.OPENAI_API_KEY) {
+          res.json({ hasKey: true, masked: maskApiKey(process.env.OPENAI_API_KEY) });
+          return;
+        }
         res.json({ hasKey: false, masked: null });
         return;
       }
@@ -426,6 +437,54 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
       deleteApiKey(user.userId);
       res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // ─── Anthropic Key Management ─────────────────────────────
+
+  app.post('/api/settings/anthropic-key', (req, res) => {
+    try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
+      const payload = apiKeySchema.parse(req.body ?? {});
+      storeApiKey(user.userId + ':anthropic', payload.apiKey);
+      // Also set as env var for LLM router
+      process.env.ANTHROPIC_API_KEY = payload.apiKey;
+      res.json({ success: true, masked: maskApiKey(payload.apiKey) });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: error.issues[0]?.message ?? 'Invalid payload' });
+        return;
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.get('/api/settings/anthropic-key', (req, res) => {
+    try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
+
+      if (!hasApiKey(user.userId + ':anthropic')) {
+        // Check env var as fallback
+        if (process.env.ANTHROPIC_API_KEY) {
+          res.json({ hasKey: true, masked: maskApiKey(process.env.ANTHROPIC_API_KEY) });
+          return;
+        }
+        res.json({ hasKey: false, masked: null });
+        return;
+      }
+
+      const apiKey = getApiKey(user.userId + ':anthropic');
+      if (!apiKey) {
+        res.json({ hasKey: false, masked: null });
+        return;
+      }
+
+      res.json({ hasKey: true, masked: maskApiKey(apiKey) });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
@@ -570,14 +629,17 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     const user = getRequestUser(req, res);
     if (!user) return;
 
-    res.json(listBrands(user.userId));
+    // When auth disabled, show all brands (including templates)
+    const userId = process.env.AUTH_ENABLED === 'true' ? user.userId : undefined;
+    res.json(listBrands(userId));
   });
 
   app.get('/api/brands/:id', (req, res) => {
     const user = getRequestUser(req, res);
     if (!user) return;
 
-    const brand = getBrand(req.params.id, user.userId);
+    const userId = process.env.AUTH_ENABLED === 'true' ? user.userId : undefined;
+    const brand = getBrand(req.params.id, userId);
     if (!brand) return res.status(404).json({ error: 'Brand not found' });
     res.json(brand);
   });
