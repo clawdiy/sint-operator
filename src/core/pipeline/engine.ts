@@ -28,6 +28,7 @@ import type { MeteringTracker } from '../metering/tracker.js';
 // ─── Constants ────────────────────────────────────────────────
 
 const PARALLEL_CONCURRENCY_LIMIT = 5;
+const DEFAULT_STEP_TIMEOUT_MS = 120_000;
 
 // ─── Pipeline Registry ────────────────────────────────────────
 
@@ -417,14 +418,20 @@ async function executeStep(step: PipelineStep, ctx: StepContext): Promise<StepRu
       }
 
       const start = Date.now();
-      const result = await skill.execute({
-        inputs: resolvedInputs,
-        brand: ctx.brand,
-        llm: ctx.llm,
-        tools: ctx.tools,
-        memory: ctx.memory,
-        logger: ctx.logger,
-      });
+      const stepTimeoutMs = (step.config?.timeout as number) ?? DEFAULT_STEP_TIMEOUT_MS;
+      const result = await Promise.race([
+        skill.execute({
+          inputs: resolvedInputs,
+          brand: ctx.brand,
+          llm: ctx.llm,
+          tools: ctx.tools,
+          memory: ctx.memory,
+          logger: ctx.logger,
+        }),
+        sleep(stepTimeoutMs).then(() => {
+          throw new Error(`Step "${step.id}" timed out after ${stepTimeoutMs}ms`);
+        }),
+      ]);
 
       stepRun.status = 'completed';
       stepRun.output = result.output;

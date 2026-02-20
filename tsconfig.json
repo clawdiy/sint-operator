@@ -36,6 +36,8 @@
     "dist",
     "data",
     "src/ui",
+    "src/api/onboarding.ts",
+    "src/api/notifications.ts",
     "vite.config.ts"
   ]
 }

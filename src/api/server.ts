@@ -1,6 +1,6 @@
 /**
  * REST API Server v3
- * 
+ *
  * HTTP interface with:
  * - Async pipeline execution (returns run ID immediately)
  * - Proper CORS for Railway deployment
@@ -9,15 +9,53 @@
  * - Run status polling
  * - Metering endpoints
  * - Skill discovery
+ * - SSE streaming for run progress
+ * - Rate limiting
  */
 
 import express from 'express';
 import { join, dirname } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { EventEmitter } from 'events';
 import cors from 'cors';
 import multer from 'multer';
+import rateLimit from 'express-rate-limit';
 import type { Orchestrator } from '../orchestrator/index.js';
+
+// ─── SSE Event Bus ───────────────────────────────────────────
+
+interface RunEvent {
+  runId: string;
+  type: 'status' | 'step' | 'complete' | 'error';
+  data: Record<string, unknown>;
+  timestamp: string;
+}
+
+const runEvents = new EventEmitter();
+runEvents.setMaxListeners(100);
+
+export function emitRunEvent(event: RunEvent): void {
+  runEvents.emit(`run:${event.runId}`, event);
+}
+
+// ─── Rate Limiters ───────────────────────────────────────────
+
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const pipelineLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many pipeline requests, please try again later.' },
+});
 
 // ─── Async Run Store ──────────────────────────────────────────
 
@@ -124,9 +162,13 @@ function enqueueAsyncRun(
 
   asyncRuns.set(asyncRun.id, asyncRun);
 
+  emitRunEvent({ runId: asyncRun.id, type: 'status', data: { status: 'queued' }, timestamp: asyncRun.startedAt });
+
   queueMicrotask(() => {
     if (asyncRun.status === 'cancelled') return;
     asyncRun.status = 'running';
+
+    emitRunEvent({ runId: asyncRun.id, type: 'status', data: { status: 'running' }, timestamp: new Date().toISOString() });
 
     void execute()
       .then(result => {
@@ -134,6 +176,7 @@ function enqueueAsyncRun(
         asyncRun.status = 'completed';
         asyncRun.completedAt = new Date().toISOString();
         asyncRun.result = result;
+        emitRunEvent({ runId: asyncRun.id, type: 'complete', data: { status: 'completed', result }, timestamp: asyncRun.completedAt });
         cleanupAsyncRuns();
       })
       .catch(err => {
@@ -141,6 +184,7 @@ function enqueueAsyncRun(
         asyncRun.status = 'failed';
         asyncRun.completedAt = new Date().toISOString();
         asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
+        emitRunEvent({ runId: asyncRun.id, type: 'error', data: { status: 'failed', error: asyncRun.error }, timestamp: asyncRun.completedAt });
         cleanupAsyncRuns();
       });
   });
@@ -167,7 +211,13 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   app.use(express.json({ limit: '50mb' }));
 
-  const upload = multer({ dest: '/tmp/sint-uploads/' });
+  // Rate limiting
+  app.use('/api/', generalLimiter);
+
+  // File upload — use SINT_DATA_DIR for uploads
+  const uploadDir = join(process.env.SINT_DATA_DIR ?? './data', 'uploads');
+  mkdirSync(uploadDir, { recursive: true });
+  const upload = multer({ dest: uploadDir, limits: { fileSize: 100 * 1024 * 1024 } });
 
   // ─── Timeout Middleware ───────────────────────────────────
   // 30s default, pipeline routes get 60s
@@ -222,7 +272,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     res.json(pipeline);
   });
 
-  app.post('/api/pipelines/:id/run', async (req, res) => {
+  app.post('/api/pipelines/:id/run', pipelineLimiter, async (req, res) => {
     try {
       const { brandId, inputs } = req.body;
       if (!brandId) return res.status(400).json({ error: 'brandId required' });
@@ -245,7 +295,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   // ─── Quick Actions (async) ──────────────────────────────
 
-  app.post('/api/repurpose', async (req, res) => {
+  app.post('/api/repurpose', pipelineLimiter, async (req, res) => {
     try {
       const { brandId, content, platforms } = req.body;
       const parsedPlatforms = Array.isArray(platforms)
@@ -268,7 +318,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     }
   });
 
-  app.post('/api/blog', async (req, res) => {
+  app.post('/api/blog', pipelineLimiter, async (req, res) => {
     try {
       const { brandId, topic, keywords } = req.body;
       if (!brandId || !topic) {
@@ -290,7 +340,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     }
   });
 
-  app.post('/api/calendar', async (req, res) => {
+  app.post('/api/calendar', pipelineLimiter, async (req, res) => {
     try {
       const { brandId, days, themes } = req.body;
       const parsedDays = Number(days);
@@ -354,6 +404,55 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
 
   app.get('/api/skills', (_req, res) => {
     res.json(orchestrator.listSkills());
+  });
+
+  // ─── SSE Run Streaming ──────────────────────────────────
+
+  app.get('/api/runs/:id/stream', (req, res) => {
+    const runId = req.params.id;
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'connected', runId })}\n\n`);
+
+    const listener = (event: RunEvent) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (event.type === 'complete' || event.type === 'error') {
+        cleanup();
+        res.end();
+      }
+    };
+
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 15_000);
+
+    const cleanup = () => {
+      clearInterval(heartbeat);
+      runEvents.removeListener(`run:${runId}`, listener);
+    };
+
+    runEvents.on(`run:${runId}`, listener);
+    req.on('close', cleanup);
+
+    // If run is already terminal, send final event immediately
+    const existingRun = asyncRuns.get(runId);
+    if (existingRun && isTerminalStatus(existingRun.status)) {
+      const eventType = existingRun.status === 'completed' ? 'complete' : 'error';
+      res.write(`data: ${JSON.stringify({
+        runId,
+        type: eventType,
+        data: { status: existingRun.status, result: existingRun.result, error: existingRun.error },
+        timestamp: existingRun.completedAt ?? new Date().toISOString(),
+      })}\n\n`);
+      cleanup();
+      res.end();
+    }
   });
 
   // ─── Runs (both engine runs and async API runs) ─────────
@@ -461,7 +560,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     join(process.cwd(), 'src', 'ui', 'dist'),        // cwd/src/ui/dist
     join(process.cwd(), 'dist', 'ui-static'),         // cwd/dist/ui-static
   ];
-  
+
   const uiPath = uiPaths.find(p => existsSync(p)) ?? null;
   console.log(`   UI search: ${uiPaths.map(p => `${existsSync(p) ? '✅' : '❌'} ${p}`).join('\n              ')}`);
   if (uiPath) {
@@ -486,7 +585,8 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     console.log(`   Repurpose: POST /api/repurpose`);
     console.log(`   Blog:      POST /api/blog`);
     console.log(`   Calendar:  POST /api/calendar`);
-    console.log(`   Run Poll:  GET  /api/runs/:id\n`);
+    console.log(`   Run Poll:  GET  /api/runs/:id`);
+    console.log(`   Run Stream: GET  /api/runs/:id/stream (SSE)`);
     console.log(`   Run Cancel: POST /api/runs/:id/cancel\n`);
   });
 

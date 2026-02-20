@@ -112,7 +112,7 @@ export const contentRepurposeSkill: Skill = {
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
     const text = ctx.inputs.text as string;
-    const platforms = ctx.inputs.target_platforms as string[];
+    const platforms = Array.isArray(ctx.inputs.target_platforms) ? ctx.inputs.target_platforms : [];
     const contentMap = ctx.inputs.content_map as Record<string, unknown> | null;
     const focus = (ctx.inputs.focus as string) ?? '';
 
@@ -185,9 +185,10 @@ Respond with JSON:
     });
 
     // Store in memory
+    const deliverables = Array.isArray(result.data.deliverables) ? result.data.deliverables : [];
     await ctx.memory.store('repurpose', `run-${Date.now()}`, text.slice(0, 500), {
       platforms,
-      outputCount: result.data.deliverables.length,
+      outputCount: deliverables.length,
     });
 
     return {
