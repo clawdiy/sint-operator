@@ -5,3 +5,6 @@ data/
 *.db
 *.log
 /tmp/
+
+# Keep UI build output
+!src/ui/dist/
