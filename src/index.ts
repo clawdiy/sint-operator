@@ -25,8 +25,8 @@ const MODELS: ModelConfig = {
 };
 
 if (!OPENAI_API_KEY) {
-  console.error('❌ OPENAI_API_KEY is required. Set it in .env or environment.');
-  process.exit(1);
+  console.warn('⚠️  OPENAI_API_KEY not set. API will load but LLM calls will fail.');
+  console.warn('   Set OPENAI_API_KEY in environment variables to enable AI features.');
 }
 
 // Ensure directories
