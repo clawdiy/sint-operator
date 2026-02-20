@@ -1,52 +1,49 @@
 /**
- * Marketing Orchestrator
+ * Marketing Orchestrator v2
  * 
- * The brain that ties everything together:
- * - Receives assets/inputs
- * - Selects the right pipeline
- * - Injects brand context
- * - Routes outputs to platform-specific formats
- * - Tracks usage and metering
+ * Central coordination layer:
+ * - Intelligent model routing (Opus/Sonnet/Kimi)
+ * - Progressive skill discovery
+ * - Brand context injection
+ * - Usage metering with hard stops
+ * - Asset routing to platform-specific formats
  */
 
 import { join } from 'path';
-import { nanoid } from 'nanoid';
-import {
-  loadPipelines,
-  executePipeline,
-  listPipelines,
-  getPipeline,
-  getRun,
-  listRuns,
-  registerSkill,
-} from '../core/pipeline/engine.js';
-import { loadBrands, getBrand, listBrands, buildBrandContext, saveBrand, createBrand } from '../core/brand/manager.js';
+import { loadPipelines, executePipeline, listPipelines, getPipeline, getRun, listRuns } from '../core/pipeline/engine.js';
+import { loadBrands, getBrand, listBrands, saveBrand, createBrand } from '../core/brand/manager.js';
 import { ingestAsset, ingestText, ingestUrl, getAsset, listAssets } from '../core/assets/processor.js';
+import { registerSkill, discoverSkills, listSkillSummaries, getRegistrySize, getTokenEstimate } from '../core/skills/registry.js';
 import { MemoryStore } from '../core/memory/store.js';
-import { OpenAIService } from '../services/llm/openai.js';
+import { LLMRouterImpl } from '../services/llm/router.js';
 import { createToolServices } from '../services/tools/index.js';
+import { MeteringTracker } from '../core/metering/tracker.js';
 import { createLogger } from '../services/logger.js';
 
-// Import skills
+// Import built-in skills
 import { contentRepurposeSkill } from '../skills/content-repurpose/index.js';
 import { seoBlogSkill } from '../skills/seo-blog/index.js';
 import { socialCalendarSkill } from '../skills/social-calendar/index.js';
 import { platformFormatterSkill } from '../skills/platform-formatter/index.js';
+import { assetIngesterSkill } from '../skills/asset-ingester/index.js';
+import { contentAnalyzerSkill } from '../skills/content-analyzer/index.js';
 
-import type { BrandProfile, PipelineRun, Logger } from '../core/types.js';
+import type { BrandProfile, PipelineRun, Logger, ModelConfig } from '../core/types.js';
 
 export interface OrchestratorConfig {
   dataDir: string;
   configDir: string;
   openaiApiKey: string;
   openaiBaseUrl?: string;
-  defaultModel?: string;
+  models: ModelConfig;
+  embeddingModel?: string;
 }
 
 export class Orchestrator {
   private memory: MemoryStore;
-  private llm: OpenAIService;
+  private llm: LLMRouterImpl;
   private tools: ReturnType<typeof createToolServices>;
+  private metering: MeteringTracker;
   private logger: Logger;
   private config: OrchestratorConfig;
 
@@ -54,30 +51,45 @@ export class Orchestrator {
     this.config = config;
     this.logger = createLogger(join(config.dataDir, 'logs'));
 
-    // Initialize services
-    this.llm = new OpenAIService({
+    // Initialize LLM Router with model tiers
+    this.llm = new LLMRouterImpl({
       apiKey: config.openaiApiKey,
       baseUrl: config.openaiBaseUrl,
-      defaultModel: config.defaultModel ?? 'gpt-4o',
+      models: config.models,
+      embeddingModel: config.embeddingModel,
     });
 
+    // Initialize persistence
     this.memory = new MemoryStore(join(config.dataDir, 'memory.db'));
     this.memory.setLLM(this.llm);
-    this.tools = createToolServices();
+    this.metering = new MeteringTracker(join(config.dataDir, 'metering.db'));
 
-    // Register skills
+    // Initialize tools
+    this.tools = createToolServices(config.openaiApiKey, config.openaiBaseUrl);
+
+    // Register built-in skills
+    registerSkill(assetIngesterSkill);
+    registerSkill(contentAnalyzerSkill);
     registerSkill(contentRepurposeSkill);
     registerSkill(seoBlogSkill);
     registerSkill(socialCalendarSkill);
     registerSkill(platformFormatterSkill);
 
-    // Load configs
+    // Discover external skills (L1 — manifest only)
+    discoverSkills(join(config.configDir, 'skills'));
+
+    // Load pipeline definitions
     loadPipelines(join(config.configDir, 'pipelines'));
+
+    // Load brand profiles
     loadBrands(join(config.configDir, 'brands'));
 
     this.logger.info('Orchestrator initialized', {
       pipelines: listPipelines().length,
       brands: listBrands().length,
+      skills: getRegistrySize(),
+      skillTokenEstimate: getTokenEstimate(),
+      models: config.models,
     });
   }
 
@@ -100,23 +112,21 @@ export class Orchestrator {
       tools: this.tools,
       memory: this.memory,
       logger: this.logger,
+      metering: this.metering,
       onStepComplete: (step) => {
-        this.logger.info(`Step completed: ${step.stepId}`, {
-          status: step.status,
+        this.logger.info(`Step ${step.stepId}: ${step.status}`, {
+          model: step.modelUsed,
           tokens: step.tokensUsed,
+          cost: step.costUnits,
           duration: step.durationMs,
         });
       },
     });
   }
 
-  // ─── Quick Actions (one-shot helpers) ─────────────────────
+  // ─── Quick Actions ────────────────────────────────────────
 
-  async repurposeContent(
-    brandId: string,
-    content: string,
-    platforms: string[]
-  ): Promise<PipelineRun> {
+  async repurposeContent(brandId: string, content: string, platforms: string[]): Promise<PipelineRun> {
     const asset = ingestText(content, join(this.config.dataDir, 'assets'));
     return this.runPipeline('content-repurpose', brandId, {
       asset_id: asset.id,
@@ -125,45 +135,22 @@ export class Orchestrator {
     });
   }
 
-  async generateBlogPost(
-    brandId: string,
-    topic: string,
-    keywords: string[]
-  ): Promise<PipelineRun> {
-    return this.runPipeline('seo-blog', brandId, {
-      topic,
-      keywords,
-    });
+  async generateBlogPost(brandId: string, topic: string, keywords: string[]): Promise<PipelineRun> {
+    return this.runPipeline('seo-blog', brandId, { topic, keywords });
   }
 
-  async generateSocialCalendar(
-    brandId: string,
-    days: number,
-    themes: string[]
-  ): Promise<PipelineRun> {
-    return this.runPipeline('social-calendar', brandId, {
-      days,
-      themes,
-    });
+  async generateSocialCalendar(brandId: string, days: number, themes: string[]): Promise<PipelineRun> {
+    return this.runPipeline('social-calendar', brandId, { days, themes });
   }
 
   // ─── Asset Management ─────────────────────────────────────
 
   async uploadAsset(filePath: string, originalName?: string) {
-    return ingestAsset({
-      filePath,
-      assetsDir: join(this.config.dataDir, 'assets'),
-      originalName,
-    });
+    return ingestAsset({ filePath, assetsDir: join(this.config.dataDir, 'assets'), originalName });
   }
 
-  getAsset(id: string) {
-    return getAsset(id);
-  }
-
-  listAssets() {
-    return listAssets();
-  }
+  getAsset(id: string) { return getAsset(id); }
+  listAssets() { return listAssets(); }
 
   // ─── Brand Management ─────────────────────────────────────
 
@@ -173,36 +160,34 @@ export class Orchestrator {
     return brand;
   }
 
-  getBrand(id: string) {
-    return getBrand(id);
-  }
-
-  listBrands() {
-    return listBrands();
-  }
+  getBrand(id: string) { return getBrand(id); }
+  listBrands() { return listBrands(); }
 
   // ─── Pipeline Info ────────────────────────────────────────
 
-  listPipelines() {
-    return listPipelines();
-  }
+  listPipelines() { return listPipelines(); }
+  getPipeline(id: string) { return getPipeline(id); }
+  getRun(id: string) { return getRun(id); }
+  listRuns() { return listRuns(); }
 
-  getPipeline(id: string) {
-    return getPipeline(id);
-  }
+  // ─── Skills ───────────────────────────────────────────────
 
-  getRun(id: string) {
-    return getRun(id);
-  }
+  listSkills() { return listSkillSummaries(); }
 
-  listRuns() {
-    return listRuns();
+  // ─── Metering ─────────────────────────────────────────────
+
+  getUsageSummary(days?: number) { return this.metering.getSummary(days); }
+  getModelUsage() { return this.llm.getUsage(); }
+  
+  setUsageLimits(limits: { daily?: number; monthly?: number; perRun?: number }) {
+    this.metering.setLimits(limits);
   }
 
   // ─── Cleanup ──────────────────────────────────────────────
 
   shutdown(): void {
     this.memory.close();
+    this.metering.close();
     this.logger.info('Orchestrator shut down');
   }
 }

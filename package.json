@@ -1,6 +1,6 @@
 {
   "name": "@sint/marketing-operator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SINT Marketing Agent Operator — Upload one asset, get dozens of platform-ready deliverables",
   "type": "module",
   "main": "dist/index.js",
@@ -20,14 +20,13 @@
     "commander": "^12.1.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
-    "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.3",
     "js-yaml": "^4.1.0",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.7",
     "openai": "^4.73.0",
     "p-queue": "^8.0.1",
-    "puppeteer": "^23.6.0",
+    "playwright": "^1.49.0",
     "sharp": "^0.33.5",
     "winston": "^3.15.0",
     "zod": "^3.23.8"

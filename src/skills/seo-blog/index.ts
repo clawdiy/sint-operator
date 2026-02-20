@@ -1,12 +1,9 @@
 /**
- * SEO Blog Skill
+ * SEO Blog Skill v2
  * 
- * Generates a full SEO-optimized blog post with:
- * - Keyword research integration
- * - Structured headers (H1-H3)
- * - Meta description & title
- * - Internal/external link suggestions
- * - Schema markup recommendations
+ * Two-step generation:
+ * 1. Outline with keyword research (routine tier)
+ * 2. Full article writing (complex tier)
  */
 
 import { buildBrandContext } from '../../core/brand/manager.js';
@@ -29,8 +26,9 @@ interface BlogOutput {
 export const seoBlogSkill: Skill = {
   id: 'seo-blog',
   name: 'SEO Blog Generator',
-  description: 'Generate a full SEO-optimized blog article',
-  version: '1.0.0',
+  description: 'Generate a full SEO-optimized blog article with metadata, keyword targeting, and schema recommendations.',
+  version: '2.0.0',
+  costUnits: 20,
   inputs: [
     { name: 'topic', type: 'string', required: true, description: 'Blog topic or title idea' },
     { name: 'keywords', type: 'array', required: false, description: 'Target keywords', default: [] },
@@ -47,37 +45,14 @@ export const seoBlogSkill: Skill = {
     const keywords = (ctx.inputs.keywords as string[]) ?? [];
     const wordCount = (ctx.inputs.word_count as number) ?? 1500;
     const style = (ctx.inputs.style as string) ?? 'informational';
+    let totalTokens = 0;
+    let totalCost = 0;
+    let lastModel = '';
 
     const brandContext = buildBrandContext(ctx.brand);
 
-    // Step 1: Research & outline
-    const outlinePrompt = `You are an expert SEO content strategist.
-
-${brandContext}
-
-Create a detailed blog outline for the following:
-- Topic: ${topic}
-- Target keywords: ${keywords.join(', ') || 'derive from topic'}
-- Target word count: ${wordCount}
-- Style: ${style}
-- Brand keywords to weave in: ${ctx.brand.keywords.join(', ')}
-
-Respond with JSON:
-{
-  "title": "<SEO-optimized title with primary keyword>",
-  "metaTitle": "<60 char max meta title>",
-  "metaDescription": "<155 char max meta description with CTA>",
-  "slug": "<url-friendly-slug>",
-  "keywords": {
-    "primary": "<main keyword>",
-    "secondary": ["<2-3 secondary keywords>"],
-    "lsi": ["<5-8 LSI/related terms>"]
-  },
-  "headers": ["H2: ...", "H3: ...", "H2: ...", "H3: ..."],
-  "schemaType": "Article|HowTo|FAQ|BlogPosting"
-}`;
-
-    const outline = await ctx.llm.completeJSON<{
+    // Step 1: Research & outline (routine tier — cost efficient)
+    const outlineResult = await ctx.llm.completeJSON<{
       title: string;
       metaTitle: string;
       metaDescription: string;
@@ -85,58 +60,83 @@ Respond with JSON:
       keywords: { primary: string; secondary: string[]; lsi: string[] };
       headers: string[];
       schemaType: string;
-    }>(outlinePrompt, { type: 'object' });
-
-    // Step 2: Write full article
-    const writePrompt = `You are a world-class blog writer specializing in SEO content.
+    }>(`You are an expert SEO content strategist.
 
 ${brandContext}
 
-Write a complete blog article based on this outline:
+Create a detailed blog outline:
+- Topic: ${topic}
+- Target keywords: ${keywords.join(', ') || 'derive from topic'}
+- Target word count: ${wordCount}
+- Style: ${style}
+- Brand keywords: ${ctx.brand.keywords.join(', ')}
+
+Respond with JSON:
+{
+  "title": "<SEO title with primary keyword>",
+  "metaTitle": "<60 char max>",
+  "metaDescription": "<155 char max with CTA>",
+  "slug": "<url-slug>",
+  "keywords": { "primary": "", "secondary": [""], "lsi": [""] },
+  "headers": ["H2: ...", "H3: ..."],
+  "schemaType": "Article|HowTo|FAQ|BlogPosting"
+}`, { type: 'object' }, { tier: 'routine' });
+
+    totalTokens += outlineResult.meta.totalTokens;
+    totalCost += outlineResult.meta.costUnits;
+    const outline = outlineResult.data;
+
+    // Step 2: Write full article (complex tier — quality matters)
+    const writeResult = await ctx.llm.complete(
+      `You are a world-class blog writer.
+
+${brandContext}
+
+Write a complete blog article:
 - Title: ${outline.title}
 - Headers: ${outline.headers.join(' → ')}
 - Primary keyword: ${outline.keywords.primary} (use 3-5 times naturally)
-- Secondary keywords: ${outline.keywords.secondary.join(', ')}
-- LSI terms to include: ${outline.keywords.lsi.join(', ')}
-- Target word count: ${wordCount}
-- Style: ${style}
+- Secondary: ${outline.keywords.secondary.join(', ')}
+- LSI terms: ${outline.keywords.lsi.join(', ')}
+- Target: ${wordCount} words, ${style} style
 
 Requirements:
-1. Write in Markdown format
-2. Start with an engaging intro (no "In today's..." openings)
-3. Use the header structure provided
-4. Include bullet points and numbered lists where appropriate
-5. End with a strong conclusion and CTA
-6. Maintain brand voice throughout
-7. Make it genuinely useful — not AI-sounding fluff
-8. Include [suggested internal link] and [suggested external link] placeholders where relevant
+1. Markdown format with proper headers
+2. Engaging intro (no "In today's..." cliches)
+3. Bullet points and lists where appropriate
+4. Strong conclusion with CTA
+5. Brand voice throughout
+6. Genuinely useful — not AI fluff
+7. [internal link] and [external link] placeholders
 
-Write the FULL article now. No shortcuts, no summaries. Every section complete.`;
+Write the FULL article. Every section complete.`,
+      { tier: 'complex', maxTokens: 8192, temperature: 0.7 }
+    );
 
-    const content = await ctx.llm.complete(writePrompt, {
-      maxTokens: 8192,
-      temperature: 0.7,
-    });
+    totalTokens += writeResult.meta.totalTokens;
+    totalCost += writeResult.meta.costUnits;
+    lastModel = writeResult.meta.model;
 
-    const actualWordCount = content.split(/\s+/).length;
+    const actualWordCount = writeResult.text.split(/\s+/).length;
 
-    const result: BlogOutput = {
+    const article: BlogOutput = {
       ...outline,
-      content,
+      content: writeResult.text,
       wordCount: actualWordCount,
       readingTimeMin: Math.ceil(actualWordCount / 238),
-      notes: `Generated ${actualWordCount} words. Reading time: ~${Math.ceil(actualWordCount / 238)} min.`,
+      notes: `Generated ${actualWordCount} words. Outline: ${outlineResult.meta.model}, Article: ${writeResult.meta.model}.`,
     };
 
-    // Store in memory
     await ctx.memory.store('blog', `blog-${Date.now()}`, `${topic}: ${outline.title}`, {
       keywords: outline.keywords,
       wordCount: actualWordCount,
     });
 
     return {
-      output: { article: result },
-      tokensUsed: 0,
+      output: { article },
+      tokensUsed: totalTokens,
+      costUnits: totalCost,
+      modelUsed: lastModel,
       durationMs: Date.now() - start,
     };
   },

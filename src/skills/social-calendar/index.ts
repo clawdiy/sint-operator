@@ -1,8 +1,9 @@
 /**
- * Social Calendar Skill
+ * Social Calendar Skill v2
  * 
- * Generates a multi-day social media content calendar with
- * platform-specific posts, optimal posting times, and themes.
+ * Generates multi-day content calendars with intelligent model routing:
+ * - Complex tier for strategy/theme planning
+ * - Routine tier for individual post generation
  */
 
 import { buildBrandContext } from '../../core/brand/manager.js';
@@ -26,13 +27,15 @@ interface CalendarOutput {
   calendar: CalendarDay[];
   summary: string;
   totalPosts: number;
+  strategy: string;
 }
 
 export const socialCalendarSkill: Skill = {
   id: 'social-calendar',
   name: 'Social Calendar Generator',
-  description: 'Generate a multi-day social media content calendar',
-  version: '1.0.0',
+  description: 'Generate a multi-day social media content calendar with platform-specific posts, optimal posting times, and media prompts.',
+  version: '2.0.0',
+  costUnits: 15,
   inputs: [
     { name: 'days', type: 'number', required: true, description: 'Number of days to plan' },
     { name: 'themes', type: 'array', required: false, description: 'Content themes/pillars', default: [] },
@@ -44,6 +47,7 @@ export const socialCalendarSkill: Skill = {
     { name: 'calendar', type: 'array', description: 'Day-by-day content calendar' },
     { name: 'summary', type: 'string', description: 'Calendar summary' },
     { name: 'totalPosts', type: 'number', description: 'Total posts generated' },
+    { name: 'strategy', type: 'string', description: 'Content strategy overview' },
   ],
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
@@ -56,62 +60,62 @@ export const socialCalendarSkill: Skill = {
 
     const brandContext = buildBrandContext(ctx.brand);
 
-    const prompt = `You are an expert social media strategist planning a content calendar.
+    const prompt = `You are an expert social media strategist.
 
 ${brandContext}
 
 ## Calendar Parameters:
-- Duration: ${days} days starting from ${startDate}
+- Duration: ${days} days starting ${startDate}
 - Platforms: ${platforms.join(', ')}
 - Posts per platform per day: ${postsPerDay}
-- Content themes/pillars: ${themes.length > 0 ? themes.join(', ') : 'Derive from brand context'}
+- Themes: ${themes.length > 0 ? themes.join(', ') : 'Derive from brand context'}
 
-## Platform Best Posting Times:
-- Twitter: 8-10 AM, 12-1 PM, 5-6 PM (user's timezone)
+## Posting Times:
+- Twitter: 8-10 AM, 12-1 PM, 5-6 PM
 - LinkedIn: 7-8 AM, 12 PM, 5-6 PM (Tue-Thu best)
 - Instagram: 11 AM-1 PM, 7-9 PM (Mon/Thu best)
 - TikTok: 7-9 AM, 12-3 PM, 7-11 PM
-- Facebook: 1-4 PM (best engagement)
 
-## Instructions:
-1. Create a diverse mix of content types (educational, promotional, engagement, storytelling)
-2. Each post must be COMPLETE and READY TO USE — no placeholders
-3. Include image/media prompts for visual platforms
-4. Vary content themes across the week
-5. Include engagement hooks (questions, polls, CTAs)
-6. Respect each platform's character limits and native patterns
-7. Build narrative momentum across the calendar
+## Requirements:
+1. Each post COMPLETE and READY TO USE
+2. Mix: educational, promotional, engagement, storytelling, behind-the-scenes
+3. Include mediaPrompt for visual content ideas
+4. Build narrative momentum across the calendar
+5. Platform-native patterns and character limits
+6. Engagement hooks in every post
 
 Respond with JSON:
 {
-  "calendar": [
-    {
-      "date": "YYYY-MM-DD",
-      "theme": "<day's theme>",
-      "posts": [
-        {
-          "platform": "<platform>",
-          "time": "HH:MM",
-          "content": "<full ready-to-post content>",
-          "hashtags": ["tag1", "tag2"],
-          "mediaPrompt": "<description of ideal image/video to pair>",
-          "contentType": "educational|promotional|engagement|storytelling|behind-the-scenes",
-          "notes": "<posting tips>"
-        }
-      ]
-    }
-  ],
-  "summary": "<calendar overview>",
+  "strategy": "<overall content strategy for this period>",
+  "calendar": [{
+    "date": "YYYY-MM-DD",
+    "theme": "<day theme>",
+    "posts": [{
+      "platform": "<platform>",
+      "time": "HH:MM",
+      "content": "<full post>",
+      "hashtags": ["tag1"],
+      "mediaPrompt": "<visual description>",
+      "contentType": "educational|promotional|engagement|storytelling|behind-the-scenes",
+      "notes": "<tips>"
+    }]
+  }],
+  "summary": "<overview>",
   "totalPosts": <number>
 }`;
 
     const result = await ctx.llm.completeJSON<CalendarOutput>(prompt, {
       type: 'object',
-    }, { maxTokens: 8192 });
+    }, {
+      tier: 'complex',
+      maxTokens: 8192,
+    });
 
     return {
-      output: result,
-      tokensUsed: 0,
+      output: result.data,
+      tokensUsed: result.meta.totalTokens,
+      costUnits: result.meta.costUnits,
+      modelUsed: result.meta.model,
       durationMs: Date.now() - start,
     };
   },

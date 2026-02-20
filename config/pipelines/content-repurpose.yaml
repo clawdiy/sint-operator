@@ -1,26 +1,69 @@
 id: content-repurpose
-name: Content Repurpose Pipeline
-description: Take any content and transform it into platform-ready deliverables
-version: "1.0"
+name: Content Repurposing Pipeline
+description: "Upload one long-form asset → multi-platform content suite"
+version: "2.0"
 
 trigger:
   type: asset_upload
+  pattern: "repurpose|shred|turn.*into.*posts"
   accept:
     - text/plain
     - text/markdown
     - application/pdf
+    - video/mp4
+    - audio/mpeg
+
+inputs:
+  - name: source_asset
+    type: file
+    description: "Video URL, mp4, article URL, or long-form text"
+    required: true
+  - name: brand_profile
+    type: reference
+    description: "Brand profile to use"
+    default: active_brand
+  - name: platforms
+    type: array
+    default: [tiktok, instagram_reels, linkedin, blog]
 
 steps:
-  - id: repurpose
-    name: Repurpose Content
-    skill: content-repurpose
+  - id: ingest
+    skill: asset-ingester
+    action: >
+      If video: extract audio → Whisper transcription → timestamped transcript.
+      If article URL: scrape + clean text.
+      If text: pass through.
     inputs:
-      text: "${inputs.text}"
-      target_platforms: "${inputs.target_platforms}"
-      focus: "${inputs.focus}"
+      source_asset: "${inputs.source_asset}"
+    output: raw_transcript
+
+  - id: analyze
+    skill: content-analyzer
+    modelTier: routine
+    action: >
+      Identify key themes, quotable moments, data points.
+      Score each segment for platform suitability.
+      Extract 10 best "hook" moments for short-form.
+    inputs:
+      raw_transcript: "$raw_transcript.raw_transcript"
+      segments: "$raw_transcript.segments"
+      target_platforms: "${inputs.platforms}"
+    output: content_map
+
+  - id: generate
+    skill: content-repurpose
+    modelTier: complex
+    action: >
+      Using the content map, generate platform-specific deliverables.
+      Each piece is complete and ready to post.
+    inputs:
+      text: "$raw_transcript.raw_transcript"
+      target_platforms: "${inputs.platforms}"
+      content_map: "$content_map"
     retry:
       max: 2
       backoff: exponential
+    output: deliverables
 
 outputs:
   - platform: twitter
@@ -35,7 +78,16 @@ outputs:
     format: caption
     constraints:
       maxLength: 2200
-  - platform: tiktok
-    format: caption
+  - platform: instagram_reels
+    format: script
     constraints:
+      maxDuration: 90
+  - platform: tiktok
+    format: script
+    constraints:
+      maxDuration: 60
       maxLength: 300
+  - platform: blog
+    format: article
+    constraints:
+      maxLength: 50000

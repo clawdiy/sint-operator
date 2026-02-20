@@ -1,19 +1,18 @@
 /**
- * REST API Server
+ * REST API Server v2
  * 
- * HTTP interface for the Marketing Orchestrator.
- * Runs on localhost:18789 by default.
+ * HTTP interface with metering endpoints, skill discovery,
+ * and usage tracking.
  */
 
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
-import { join } from 'path';
 import type { Orchestrator } from '../orchestrator/index.js';
 
 export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   const app = express();
-  
+
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
 
@@ -24,8 +23,11 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
   app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
-      version: '0.1.0',
+      version: '0.2.0',
       name: 'SINT Marketing Operator',
+      skills: orchestrator.listSkills().length,
+      brands: orchestrator.listBrands().length,
+      pipelines: orchestrator.listPipelines().length,
     });
   });
 
@@ -45,7 +47,6 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     try {
       const { brandId, inputs } = req.body;
       if (!brandId) return res.status(400).json({ error: 'brandId required' });
-      
       const run = await orchestrator.runPipeline(req.params.id, brandId, inputs ?? {});
       res.json(run);
     } catch (err) {
@@ -131,6 +132,12 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     }
   });
 
+  // ─── Skills ─────────────────────────────────────────────
+
+  app.get('/api/skills', (_req, res) => {
+    res.json(orchestrator.listSkills());
+  });
+
   // ─── Runs ───────────────────────────────────────────────
 
   app.get('/api/runs', (_req, res) => {
@@ -143,12 +150,36 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789) {
     res.json(run);
   });
 
+  // ─── Metering ───────────────────────────────────────────
+
+  app.get('/api/usage', (req, res) => {
+    const days = parseInt(req.query.days as string) || 30;
+    res.json(orchestrator.getUsageSummary(days));
+  });
+
+  app.get('/api/usage/current', (_req, res) => {
+    res.json(orchestrator.getModelUsage());
+  });
+
+  app.post('/api/usage/limits', (req, res) => {
+    try {
+      orchestrator.setUsageLimits(req.body);
+      res.json({ status: 'ok' });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+    }
+  });
+
   // ─── Start ──────────────────────────────────────────────
 
   const server = app.listen(port, () => {
-    console.log(`\n🚀 SINT Marketing Operator API running at http://localhost:${port}`);
-    console.log(`   Health: http://localhost:${port}/health`);
-    console.log(`   API:    http://localhost:${port}/api/\n`);
+    console.log(`\n🚀 SINT Marketing Operator API — http://localhost:${port}`);
+    console.log(`   Health:   GET  /health`);
+    console.log(`   Skills:   GET  /api/skills`);
+    console.log(`   Usage:    GET  /api/usage`);
+    console.log(`   Repurpose: POST /api/repurpose`);
+    console.log(`   Blog:      POST /api/blog`);
+    console.log(`   Calendar:  POST /api/calendar\n`);
   });
 
   return { app, server };
