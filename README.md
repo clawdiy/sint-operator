@@ -156,3 +156,63 @@ The moat is **methodology, not connectivity**:
 ---
 
 Built by [SINT](https://sint.gg) — AI That Executes.
+
+## Social Publishing (NEW)
+
+Publish generated content directly to social platforms:
+
+```bash
+# Check configured platforms
+curl http://localhost:18789/api/publish/status
+
+# Publish a tweet
+curl -X POST http://localhost:18789/api/publish \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "twitter", "content": "Your generated content here"}'
+
+# Publish to multiple platforms
+curl -X POST http://localhost:18789/api/publish/multi \
+  -H "Content-Type: application/json" \
+  -d '{"requests": [{"platform": "twitter", "content": "..."}, {"platform": "linkedin", "content": "..."}]}'
+```
+
+**Supported:** Twitter/X (tweets, threads), LinkedIn (posts, articles)
+**Coming:** Instagram, Telegram, Discord
+
+### Environment Variables
+
+```env
+# Required for AI
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Social Publishing (optional)
+TWITTER_API_KEY=
+TWITTER_API_SECRET=
+TWITTER_ACCESS_TOKEN=
+TWITTER_ACCESS_SECRET=
+LINKEDIN_ACCESS_TOKEN=
+LINKEDIN_PERSON_URN=urn:li:person:XXXX
+```
+
+## Template Brands
+
+Get started faster with pre-built brand templates:
+
+- **SaaS Startup** — Clear, confident, problem-solution framing
+- **E-commerce / DTC** — Warm, lifestyle-first, sensory language
+- **B2B Services** — Authoritative, insight-led, case-study driven
+- **Personal Creator** — Authentic, opinionated, first-person stories
+
+Find them in `config/brands/template-*.yaml`. Clone and customize.
+
+## Docker
+
+```bash
+# Quick start
+docker-compose up -d
+
+# Or build manually
+docker build -t sint-operator .
+docker run -p 18789:18789 -e OPENAI_API_KEY=sk-... sint-operator
+```

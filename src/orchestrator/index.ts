@@ -36,6 +36,8 @@ import { brandResearcherSkill } from '../skills/brand-researcher/index.js';
 import { serpScraperSkill } from '../skills/serp-scraper/index.js';
 import { seoOptimizerSkill } from '../skills/seo-optimizer/index.js';
 import { notifierSkill } from '../skills/notifier/index.js';
+import { newsletterSkill } from '../skills/newsletter/index.js';
+import { competitorAnalyzerSkill } from '../skills/competitor-analyzer/index.js';
 
 import type { BrandProfile, PipelineRun, Logger, ModelConfig, StepRun } from '../core/types.js';
 
@@ -90,6 +92,8 @@ export class Orchestrator {
     registerSkill(serpScraperSkill);
     registerSkill(seoOptimizerSkill);
     registerSkill(notifierSkill);
+    registerSkill(newsletterSkill);
+    registerSkill(competitorAnalyzerSkill);
 
     // Discover external skills (L1 — manifest only)
     discoverSkills(join(config.configDir, 'skills'));
