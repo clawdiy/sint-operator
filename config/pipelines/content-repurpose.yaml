@@ -1,0 +1,41 @@
+id: content-repurpose
+name: Content Repurpose Pipeline
+description: Take any content and transform it into platform-ready deliverables
+version: "1.0"
+
+trigger:
+  type: asset_upload
+  accept:
+    - text/plain
+    - text/markdown
+    - application/pdf
+
+steps:
+  - id: repurpose
+    name: Repurpose Content
+    skill: content-repurpose
+    inputs:
+      text: "${inputs.text}"
+      target_platforms: "${inputs.target_platforms}"
+      focus: "${inputs.focus}"
+    retry:
+      max: 2
+      backoff: exponential
+
+outputs:
+  - platform: twitter
+    format: thread
+    constraints:
+      maxLength: 280
+  - platform: linkedin
+    format: text
+    constraints:
+      maxLength: 3000
+  - platform: instagram
+    format: caption
+    constraints:
+      maxLength: 2200
+  - platform: tiktok
+    format: caption
+    constraints:
+      maxLength: 300

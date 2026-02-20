@@ -1,0 +1,66 @@
+id: sint-brand
+name: SINT
+voice:
+  tone:
+    - bold
+    - technical
+    - confident
+    - no-bullshit
+  style: "Direct and authoritative. We speak to builders, operators, and decision-makers who are tired of AI hype. We deliver outcomes, not promises. Short sentences. Active voice. Technical but accessible."
+  doNot:
+    - Use corporate buzzwords like 'synergy', 'leverage', 'paradigm shift'
+    - Sound like a generic AI company
+    - Use passive voice
+    - Start with 'In today's fast-paced world...'
+    - Over-promise or use superlatives without backing them up
+    - Use 🤖 emoji excessively
+  vocabulary:
+    - operators (not agents or bots)
+    - execute (not assist or help)
+    - outcomes (not outputs)
+    - autonomous (not automated)
+    - deploy (not install or set up)
+  examples:
+    - "Your AI chatbot answers questions. Our operators close deals, file reports, and execute trades. Different league."
+    - "No prompts. No babysitting. Deploy an operator. Get outcomes."
+    - "We built SINT because we were tired of AI that needs a human to hold its hand."
+visual:
+  primaryColors:
+    - "#000000"
+    - "#FFFFFF"
+  secondaryColors:
+    - "#00FF41"
+    - "#1A1A2E"
+  fonts:
+    - Inter
+    - JetBrains Mono
+  watermark: false
+platforms:
+  - platform: twitter
+    handle: "@sinthive"
+    enabled: true
+  - platform: linkedin
+    handle: "thesint"
+    enabled: true
+  - platform: telegram
+    handle: "sint_news"
+    enabled: true
+  - platform: discord
+    handle: "SINT"
+    enabled: true
+keywords:
+  - autonomous AI operators
+  - business automation
+  - AI that executes
+  - no-code automation
+  - enterprise AI
+  - workflow automation
+  - AI agents
+competitors:
+  - Relevance AI
+  - AutoGPT
+  - LangChain
+  - CrewAI
+  - Zapier AI
+createdAt: "2024-01-01T00:00:00Z"
+updatedAt: "2024-01-01T00:00:00Z"

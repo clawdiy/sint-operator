@@ -1,0 +1,35 @@
+id: social-calendar
+name: Social Calendar Pipeline
+description: Generate a multi-day social media content calendar
+version: "1.0"
+
+trigger:
+  type: manual
+
+steps:
+  - id: generate_calendar
+    name: Generate Social Calendar
+    skill: social-calendar
+    inputs:
+      days: "${inputs.days}"
+      themes: "${inputs.themes}"
+      platforms: "${inputs.platforms}"
+      posts_per_day: "${inputs.posts_per_day}"
+      start_date: "${inputs.start_date}"
+    retry:
+      max: 1
+      backoff: linear
+
+outputs:
+  - platform: twitter
+    format: text
+    constraints:
+      maxLength: 280
+  - platform: linkedin
+    format: text
+    constraints:
+      maxLength: 3000
+  - platform: instagram
+    format: caption
+    constraints:
+      maxLength: 2200

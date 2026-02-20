@@ -1,0 +1,26 @@
+id: seo-blog
+name: SEO Blog Generator Pipeline
+description: Generate a full SEO-optimized blog article with metadata
+version: "1.0"
+
+trigger:
+  type: manual
+
+steps:
+  - id: generate_blog
+    name: Generate SEO Blog Post
+    skill: seo-blog
+    inputs:
+      topic: "${inputs.topic}"
+      keywords: "${inputs.keywords}"
+      word_count: "${inputs.word_count}"
+      style: "${inputs.style}"
+    retry:
+      max: 1
+      backoff: linear
+
+outputs:
+  - platform: blog
+    format: article
+    constraints:
+      maxLength: 50000
