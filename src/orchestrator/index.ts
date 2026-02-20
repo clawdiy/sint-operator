@@ -8,13 +8,14 @@
  * - Usage metering with hard stops
  * - Asset routing to platform-specific formats
  * - Pipeline trigger matching
+ * - Direct skill execution for quick actions (bypasses unimplemented pipeline skills)
  */
 
 import { join } from 'path';
 import { loadPipelines, executePipeline, listPipelines, getPipeline, getRun, listRuns, matchPipeline, matchAllPipelines } from '../core/pipeline/engine.js';
 import { loadBrands, getBrand, listBrands, saveBrand, createBrand } from '../core/brand/manager.js';
 import { ingestAsset, ingestText, ingestUrl, getAsset, listAssets } from '../core/assets/processor.js';
-import { registerSkill, discoverSkills, listSkillSummaries, getRegistrySize, getTokenEstimate } from '../core/skills/registry.js';
+import { registerSkill, discoverSkills, listSkillSummaries, getRegistrySize, getTokenEstimate, getSkill } from '../core/skills/registry.js';
 import { MemoryStore } from '../core/memory/store.js';
 import { LLMRouterImpl } from '../services/llm/router.js';
 import { createToolServices } from '../services/tools/index.js';
@@ -36,7 +37,7 @@ import { serpScraperSkill } from '../skills/serp-scraper/index.js';
 import { seoOptimizerSkill } from '../skills/seo-optimizer/index.js';
 import { notifierSkill } from '../skills/notifier/index.js';
 
-import type { BrandProfile, PipelineRun, Logger, ModelConfig } from '../core/types.js';
+import type { BrandProfile, PipelineRun, Logger, ModelConfig, StepRun } from '../core/types.js';
 
 export interface OrchestratorConfig {
   dataDir: string;
@@ -144,23 +145,193 @@ export class Orchestrator {
   matchPipeline(input: string) { return matchPipeline(input); }
   matchAllPipelines(input: string) { return matchAllPipelines(input); }
 
-  // ─── Quick Actions ────────────────────────────────────────
+  // ─── Quick Actions (Direct Skill Execution) ───────────────
+  // These bypass the full pipeline YAML (which references unimplemented skills)
+  // and call the registered skills directly for reliable end-to-end execution.
 
   async repurposeContent(brandId: string, content: string, platforms: string[]): Promise<PipelineRun> {
+    const brand = getBrand(brandId);
+    if (!brand) throw new Error(`Brand not found: ${brandId}`);
+
     const asset = ingestText(content, join(this.config.dataDir, 'assets'));
-    return this.runPipeline('content-repurpose', brandId, {
-      asset_id: asset.id,
-      text: content,
-      target_platforms: platforms,
-    });
+
+    const run: PipelineRun = {
+      id: `repurpose-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      pipelineId: 'content-repurpose',
+      brandId,
+      status: 'running',
+      steps: [],
+      inputs: { text: content, target_platforms: platforms, asset_id: asset.id },
+      outputs: [],
+      startedAt: new Date().toISOString(),
+      metering: { totalTokens: 0, totalCostUnits: 0, modelBreakdown: {}, totalDurationMs: 0 },
+    };
+
+    try {
+      const skill = getSkill('content-repurpose');
+      if (!skill) throw new Error('content-repurpose skill not found');
+
+      const start = Date.now();
+      const result = await skill.execute({
+        inputs: { text: content, target_platforms: platforms },
+        brand,
+        llm: this.llm,
+        tools: this.tools,
+        memory: this.memory,
+        logger: this.logger,
+      });
+
+      run.steps.push({
+        stepId: 'content-repurpose',
+        status: 'completed',
+        modelUsed: result.modelUsed,
+        startedAt: run.startedAt,
+        completedAt: new Date().toISOString(),
+        output: result.output,
+        tokensUsed: result.tokensUsed,
+        costUnits: result.costUnits,
+        durationMs: Date.now() - start,
+      });
+      run.status = 'completed';
+      run.metering.totalTokens = result.tokensUsed;
+      run.metering.totalCostUnits = result.costUnits;
+      if (result.modelUsed) {
+        run.metering.modelBreakdown[result.modelUsed] = {
+          tokens: result.tokensUsed,
+          costUnits: result.costUnits,
+        };
+      }
+    } catch (err) {
+      run.status = 'failed';
+      run.error = err instanceof Error ? err.message : String(err);
+      this.logger.error('Repurpose failed', { error: run.error });
+    }
+
+    run.completedAt = new Date().toISOString();
+    run.metering.totalDurationMs = Date.now() - new Date(run.startedAt).getTime();
+    return run;
   }
 
   async generateBlogPost(brandId: string, topic: string, keywords: string[]): Promise<PipelineRun> {
-    return this.runPipeline('seo-blog', brandId, { topic, keywords });
+    const brand = getBrand(brandId);
+    if (!brand) throw new Error(`Brand not found: ${brandId}`);
+
+    const run: PipelineRun = {
+      id: `blog-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      pipelineId: 'seo-blog',
+      brandId,
+      status: 'running',
+      steps: [],
+      inputs: { topic, keywords },
+      outputs: [],
+      startedAt: new Date().toISOString(),
+      metering: { totalTokens: 0, totalCostUnits: 0, modelBreakdown: {}, totalDurationMs: 0 },
+    };
+
+    try {
+      const skill = getSkill('seo-blog');
+      if (!skill) throw new Error('seo-blog skill not found');
+
+      const start = Date.now();
+      const result = await skill.execute({
+        inputs: { topic, keywords, word_count: 1500, style: 'informational' },
+        brand,
+        llm: this.llm,
+        tools: this.tools,
+        memory: this.memory,
+        logger: this.logger,
+      });
+
+      run.steps.push({
+        stepId: 'seo-blog',
+        status: 'completed',
+        modelUsed: result.modelUsed,
+        startedAt: run.startedAt,
+        completedAt: new Date().toISOString(),
+        output: result.output,
+        tokensUsed: result.tokensUsed,
+        costUnits: result.costUnits,
+        durationMs: Date.now() - start,
+      });
+      run.status = 'completed';
+      run.metering.totalTokens = result.tokensUsed;
+      run.metering.totalCostUnits = result.costUnits;
+      if (result.modelUsed) {
+        run.metering.modelBreakdown[result.modelUsed] = {
+          tokens: result.tokensUsed,
+          costUnits: result.costUnits,
+        };
+      }
+    } catch (err) {
+      run.status = 'failed';
+      run.error = err instanceof Error ? err.message : String(err);
+      this.logger.error('Blog generation failed', { error: run.error });
+    }
+
+    run.completedAt = new Date().toISOString();
+    run.metering.totalDurationMs = Date.now() - new Date(run.startedAt).getTime();
+    return run;
   }
 
   async generateSocialCalendar(brandId: string, days: number, themes: string[]): Promise<PipelineRun> {
-    return this.runPipeline('social-calendar', brandId, { days, themes });
+    const brand = getBrand(brandId);
+    if (!brand) throw new Error(`Brand not found: ${brandId}`);
+
+    const run: PipelineRun = {
+      id: `calendar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      pipelineId: 'social-calendar',
+      brandId,
+      status: 'running',
+      steps: [],
+      inputs: { days, themes },
+      outputs: [],
+      startedAt: new Date().toISOString(),
+      metering: { totalTokens: 0, totalCostUnits: 0, modelBreakdown: {}, totalDurationMs: 0 },
+    };
+
+    try {
+      const skill = getSkill('social-calendar');
+      if (!skill) throw new Error('social-calendar skill not found');
+
+      const start = Date.now();
+      const result = await skill.execute({
+        inputs: { days, themes, platforms: ['twitter', 'linkedin', 'instagram'], posts_per_day: 1 },
+        brand,
+        llm: this.llm,
+        tools: this.tools,
+        memory: this.memory,
+        logger: this.logger,
+      });
+
+      run.steps.push({
+        stepId: 'social-calendar',
+        status: 'completed',
+        modelUsed: result.modelUsed,
+        startedAt: run.startedAt,
+        completedAt: new Date().toISOString(),
+        output: result.output,
+        tokensUsed: result.tokensUsed,
+        costUnits: result.costUnits,
+        durationMs: Date.now() - start,
+      });
+      run.status = 'completed';
+      run.metering.totalTokens = result.tokensUsed;
+      run.metering.totalCostUnits = result.costUnits;
+      if (result.modelUsed) {
+        run.metering.modelBreakdown[result.modelUsed] = {
+          tokens: result.tokensUsed,
+          costUnits: result.costUnits,
+        };
+      }
+    } catch (err) {
+      run.status = 'failed';
+      run.error = err instanceof Error ? err.message : String(err);
+      this.logger.error('Calendar generation failed', { error: run.error });
+    }
+
+    run.completedAt = new Date().toISOString();
+    run.metering.totalDurationMs = Date.now() - new Date(run.startedAt).getTime();
+    return run;
   }
 
   // ─── Asset Management ─────────────────────────────────────
@@ -198,9 +369,9 @@ export class Orchestrator {
 
   getUsageSummary(days?: number) { return this.metering.getSummary(days); }
   getModelUsage() { return this.llm.getUsage(); }
-  
+
   async testLLM() { return this.llm.testConnection(); }
-  
+
   setUsageLimits(limits: { daily?: number; monthly?: number; perRun?: number }) {
     this.metering.setLimits(limits);
   }
