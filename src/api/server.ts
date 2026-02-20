@@ -239,7 +239,7 @@ function enqueueAsyncRun(
         addNotification(asyncRun.userId, {
           type: 'run_completed',
           title: 'Pipeline completed',
-          message: \`\${asyncRun.pipelineId} finished successfully.\`,
+          message: `${asyncRun.pipelineId} finished successfully.`,
           runId: asyncRun.id,
         });
         emitRunEvent({ runId: asyncRun.id, type: 'complete', data: { status: 'completed', result }, timestamp: asyncRun.completedAt });
@@ -829,7 +829,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     console.log(`   Blog:      POST /api/blog`);
     console.log(`   Calendar:  POST /api/calendar`);
     console.log(`   Run Poll:  GET  /api/runs/:id`);
-    console.log(\`   Run Stream: GET  /api/runs/:id/stream (SSE)\`);
+    console.log(`   Run Stream: GET  /api/runs/:id/stream (SSE)`);
     console.log(`   Run Cancel: POST /api/runs/:id/cancel\n`);
   });
 
