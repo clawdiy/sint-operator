@@ -489,14 +489,15 @@ export function resolveInputs(
 
 export function resolveValue(value: unknown, variables: Map<string, unknown>): unknown {
   if (typeof value === 'string') {
-    // $variable reference (direct)
-    if (value.startsWith('$')) {
-      return variables.get(value) ?? value;
-    }
     // ${path.to.value} template (exact match — single expression)
+    // Must check before $variable to avoid catching ${...} as a $-ref
     if (value.startsWith('${') && value.endsWith('}') && !value.slice(2, -1).includes('${')) {
       const path = value.slice(2, -1);
       return variables.get(path) ?? variables.get(`$${path}`) ?? value;
+    }
+    // $variable reference (direct, but not ${...} templates)
+    if (value.startsWith('$') && !value.startsWith('${')) {
+      return variables.get(value) ?? value;
     }
     // Inline template replacement
     return value.replace(/\$\{([^}]+)\}/g, (_, path) => {

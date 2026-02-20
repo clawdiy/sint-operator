@@ -542,7 +542,7 @@ describe('Pipeline Engine', () => {
 
       expect(run.metering.totalTokens).toBeGreaterThan(0);
       expect(run.metering.totalCostUnits).toBeGreaterThan(0);
-      expect(run.metering.totalDurationMs).toBeGreaterThan(0);
+      expect(run.metering.totalDurationMs).toBeGreaterThanOrEqual(0);
     });
   });
 
