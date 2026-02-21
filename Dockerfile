@@ -1,6 +1,8 @@
 # ─── Stage 1: Build ──────────────────────────────────────────
 FROM node:22-slim AS builder
 
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
@@ -28,6 +30,7 @@ RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/ui/dist ./dist/ui-static
 COPY config ./config
+COPY docs ./docs
 
 EXPOSE 18789
 
