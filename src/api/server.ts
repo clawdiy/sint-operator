@@ -15,6 +15,7 @@
 
 import express from 'express';
 import { join, dirname, resolve } from 'path';
+import { RunStore, type AsyncRun } from '../core/storage/run-store.js';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
@@ -70,21 +71,9 @@ const pipelineLimiter = rateLimit({
 
 // ─── Async Run Store ──────────────────────────────────────────
 
-interface AsyncRun {
-  id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
-  pipelineId: string;
-  brandId: string;
-  userId: string;
-  startedAt: string;
-  completedAt?: string;
-  result?: unknown;
-  error?: string;
-}
 
-const asyncRuns = new Map<string, AsyncRun>();
+let runStore: RunStore;
 const ASYNC_RUN_RETENTION_MS = 24 * 60 * 60 * 1000;
-const ASYNC_RUN_MAX_ENTRIES = 500;
 
 function generateRunId(): string {
   return `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -116,26 +105,6 @@ function parseStringQuery(raw: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function cleanupAsyncRuns(nowTs: number = Date.now()): void {
-  for (const run of asyncRuns.values()) {
-    if (!isTerminalStatus(run.status)) continue;
-    const doneTs = toTimestamp(run.completedAt ?? run.startedAt);
-    if (doneTs > 0 && nowTs - doneTs > ASYNC_RUN_RETENTION_MS) {
-      asyncRuns.delete(run.id);
-    }
-  }
-
-  if (asyncRuns.size <= ASYNC_RUN_MAX_ENTRIES) return;
-
-  const terminalRuns = Array.from(asyncRuns.values())
-    .filter(run => isTerminalStatus(run.status))
-    .sort((a, b) => toTimestamp(a.completedAt ?? a.startedAt) - toTimestamp(b.completedAt ?? b.startedAt));
-
-  for (const run of terminalRuns) {
-    if (asyncRuns.size <= ASYNC_RUN_MAX_ENTRIES) break;
-    asyncRuns.delete(run.id);
-  }
-}
 
 function toAsyncRunResponse(run: AsyncRun): Record<string, unknown> {
   const nested = isObjectRecord(run.result) ? run.result : null;
@@ -175,6 +144,11 @@ function getRequestUser(req: express.Request, res: express.Response): { userId: 
   return user;
 }
 
+/** When auth is disabled, return undefined so brand lookups skip userId filter */
+function brandUserId(user: { userId: string }): string | undefined {
+  return process.env.AUTH_ENABLED === 'true' ? user.userId : undefined;
+}
+
 const apiKeySchema = z.object({
   apiKey: z.string().trim().min(1),
 });
@@ -212,8 +186,6 @@ function enqueueAsyncRun(
   userId: string,
   execute: () => Promise<unknown>,
 ): AsyncRun {
-  cleanupAsyncRuns();
-
   const asyncRun: AsyncRun = {
     id: generateRunId(),
     status: 'queued',
@@ -223,13 +195,14 @@ function enqueueAsyncRun(
     startedAt: new Date().toISOString(),
   };
 
-  asyncRuns.set(asyncRun.id, asyncRun);
+  runStore.save(asyncRun);
 
   emitRunEvent({ runId: asyncRun.id, type: 'status', data: { status: 'queued' }, timestamp: asyncRun.startedAt });
 
   queueMicrotask(() => {
     if (asyncRun.status === 'cancelled') return;
     asyncRun.status = 'running';
+        runStore.save(asyncRun);
 
     emitRunEvent({ runId: asyncRun.id, type: 'status', data: { status: 'running' }, timestamp: new Date().toISOString() });
 
@@ -239,6 +212,7 @@ function enqueueAsyncRun(
         asyncRun.status = 'completed';
         asyncRun.completedAt = new Date().toISOString();
         asyncRun.result = result;
+        runStore.save(asyncRun);
 
         addNotification(asyncRun.userId, {
           type: 'run_completed',
@@ -248,8 +222,7 @@ function enqueueAsyncRun(
         });
         emitRunEvent({ runId: asyncRun.id, type: 'complete', data: { status: 'completed', result }, timestamp: asyncRun.completedAt });
 
-        cleanupAsyncRuns();
-        // Telegram notification
+              // Telegram notification
         if (isTelegramConfigured()) {
           void notifyPipelineComplete(
             asyncRun.pipelineId, asyncRun.brandId, asyncRun.id, 'completed',
@@ -262,6 +235,7 @@ function enqueueAsyncRun(
         asyncRun.status = 'failed';
         asyncRun.completedAt = new Date().toISOString();
         asyncRun.error = err instanceof Error ? err.message : 'Unknown error';
+        runStore.save(asyncRun);
 
         addNotification(asyncRun.userId, {
           type: 'run_failed',
@@ -271,8 +245,7 @@ function enqueueAsyncRun(
         });
         emitRunEvent({ runId: asyncRun.id, type: 'error', data: { status: 'failed', error: asyncRun.error }, timestamp: asyncRun.completedAt });
 
-        cleanupAsyncRuns();
-        // Telegram notification
+              // Telegram notification
         if (isTelegramConfigured()) {
           void notifyPipelineComplete(
             asyncRun.pipelineId, asyncRun.brandId, asyncRun.id, 'failed',
@@ -291,6 +264,8 @@ export interface CreateServerOptions {
 }
 
 export function createServer(orchestrator: Orchestrator, port: number = 18789, options: CreateServerOptions = {}) {
+  runStore = new RunStore(join(process.env.SINT_DATA_DIR ?? './data', 'runs.db'));
+
   const app = express();
   const dataDir = resolve(options.dataDir ?? process.env.SINT_DATA_DIR ?? './data');
   const configDir = resolve(options.configDir ?? process.env.SINT_CONFIG_DIR ?? './config');
@@ -516,7 +491,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       if (!orchestrator.getPipeline(req.params.id)) {
         return res.status(404).json({ error: 'Pipeline not found' });
       }
-      if (!getBrand(brandId, user.userId)) {
+      if (!getBrand(brandId, brandUserId(user))) {
         return res.status(404).json({ error: 'Brand not found' });
       }
 
@@ -548,7 +523,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       if (!brandId || !content || parsedPlatforms.length === 0) {
         return res.status(400).json({ error: 'brandId, content, and platforms required' });
       }
-      if (!getBrand(brandId, user.userId)) {
+      if (!getBrand(brandId, brandUserId(user))) {
         return res.status(404).json({ error: 'Brand not found' });
       }
 
@@ -575,7 +550,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       if (!brandId || !topic) {
         return res.status(400).json({ error: 'brandId and topic required' });
       }
-      if (!getBrand(brandId, user.userId)) {
+      if (!getBrand(brandId, brandUserId(user))) {
         return res.status(404).json({ error: 'Brand not found' });
       }
 
@@ -606,7 +581,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       if (!brandId || !Number.isFinite(parsedDays) || parsedDays <= 0) {
         return res.status(400).json({ error: 'brandId and days required' });
       }
-      if (!getBrand(brandId, user.userId)) {
+      if (!getBrand(brandId, brandUserId(user))) {
         return res.status(404).json({ error: 'Brand not found' });
       }
 
@@ -731,7 +706,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     req.on('close', cleanup);
 
     // If run is already terminal, send final event immediately
-    const existingRun = asyncRuns.get(runId);
+    const existingRun = runStore.get(runId);
     if (existingRun && isTerminalStatus(existingRun.status)) {
       const eventType = existingRun.status === 'completed' ? 'complete' : 'error';
       res.write(`data: ${JSON.stringify({
@@ -751,9 +726,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     const user = getRequestUser(req, res);
     if (!user) return;
 
-    cleanupAsyncRuns();
-
-    const userAsyncRuns = Array.from(asyncRuns.values()).filter(run => run.userId === user.userId);
+      const userAsyncRuns = runStore.list({ userId: user.userId });
 
     const wrappedEngineRunIds = new Set<string>();
     for (const run of userAsyncRuns) {
@@ -766,7 +739,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     const apiRuns = userAsyncRuns.map(toAsyncRunResponse);
     const engineRuns = orchestrator.listRuns().filter(run => {
       if (wrappedEngineRunIds.has(run.id)) return false;
-      return !!getBrand(run.brandId, user.userId);
+      return !!getBrand(run.brandId, brandUserId(user));
     });
 
     const statusFilter = parseStringQuery(req.query.status)?.toLowerCase();
@@ -794,17 +767,15 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     const user = getRequestUser(req, res);
     if (!user) return;
 
-    cleanupAsyncRuns();
-
-    // Check async runs first
-    const asyncRun = asyncRuns.get(req.params.id);
+      // Check async runs first
+    const asyncRun = runStore.get(req.params.id);
     if (asyncRun && asyncRun.userId === user.userId) {
       return res.json(toAsyncRunResponse(asyncRun));
     }
 
     // Check engine runs
     const run = orchestrator.getRun(req.params.id);
-    if (!run || !getBrand(run.brandId, user.userId)) {
+    if (!run || !getBrand(run.brandId, brandUserId(user))) {
       return res.status(404).json({ error: 'Run not found' });
     }
     res.json(run);
@@ -814,9 +785,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     const user = getRequestUser(req, res);
     if (!user) return;
 
-    cleanupAsyncRuns();
-
-    const run = asyncRuns.get(req.params.id);
+      const run = runStore.get(req.params.id);
     if (!run || run.userId !== user.userId) {
       return res.status(404).json({ error: 'Run not found or not cancelable' });
     }
@@ -828,6 +797,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     run.status = 'cancelled';
     run.completedAt = new Date().toISOString();
     run.error = 'Cancelled by user';
+    runStore.save(run);
 
     res.json({
       status: 'ok',

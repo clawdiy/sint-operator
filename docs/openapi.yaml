@@ -1,0 +1,1212 @@
+openapi: 3.0.3
+info:
+  title: SINT Operator API
+  description: Marketing AI platform — repurpose content, manage pipelines, publish to social channels.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local dev
+security:
+  - BearerAuth: []
+tags:
+  - name: Quick Actions
+    description: One-click content generation
+  - name: Pipelines
+    description: Pipeline definitions and execution
+  - name: Runs
+    description: Pipeline run history and streaming
+  - name: Brands
+    description: Brand profile management
+  - name: Assets
+    description: File uploads and asset management
+  - name: Skills
+    description: Available AI skills
+  - name: Usage
+    description: Usage tracking and limits
+  - name: Settings
+    description: API key configuration
+  - name: Social Publishing
+    description: Publish content to social platforms
+  - name: MCP
+    description: Model Context Protocol tool server
+  - name: Notifications
+    description: In-app notifications
+  - name: Onboarding
+    description: User onboarding flow
+  - name: Auth
+    description: Authentication endpoints
+  - name: System
+    description: Health checks
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/auth/signup:
+    post:
+      tags: [Auth]
+      summary: Create account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      responses:
+        '200':
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  email:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/repurpose:
+    post:
+      tags: [Quick Actions]
+      summary: Repurpose content across formats
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input:
+                  type: string
+                  description: Source content to repurpose
+                formats:
+                  type: array
+                  items:
+                    type: string
+                  description: Target formats
+                brandId:
+                  type: string
+      responses:
+        '200':
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/blog:
+    post:
+      tags: [Quick Actions]
+      summary: Generate blog content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic]
+              properties:
+                topic:
+                  type: string
+                tone:
+                  type: string
+                brandId:
+                  type: string
+      responses:
+        '200':
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/calendar:
+    post:
+      tags: [Quick Actions]
+      summary: Generate content calendar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                weeks:
+                  type: integer
+                  default: 4
+                brandId:
+                  type: string
+                topics:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/pipelines:
+    get:
+      tags: [Pipelines]
+      summary: List all pipelines
+      responses:
+        '200':
+          description: Pipeline list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pipeline'
+
+  /api/pipelines/{id}:
+    get:
+      tags: [Pipelines]
+      summary: Get pipeline by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pipeline details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+        '404':
+          description: Not found
+
+  /api/pipelines/{id}/run:
+    post:
+      tags: [Pipelines]
+      summary: Execute a pipeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input:
+                  type: string
+                brandId:
+                  type: string
+                params:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/runs:
+    get:
+      tags: [Runs]
+      summary: List runs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [running, completed, failed, cancelled]
+      responses:
+        '200':
+          description: Run list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RunSummary'
+                  total:
+                    type: integer
+
+  /api/runs/{id}:
+    get:
+      tags: [Runs]
+      summary: Get run details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '404':
+          description: Not found
+
+  /api/runs/{id}/stream:
+    get:
+      tags: [Runs]
+      summary: Stream run output (SSE)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Server-Sent Events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/runs/{id}/cancel:
+    post:
+      tags: [Runs]
+      summary: Cancel a running pipeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '404':
+          description: Not found
+
+  /api/brands:
+    get:
+      tags: [Brands]
+      summary: List brands
+      responses:
+        '200':
+          description: Brand list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Brand'
+    post:
+      tags: [Brands]
+      summary: Create a brand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrandInput'
+      responses:
+        '201':
+          description: Brand created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Brand'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/brands/{id}:
+    get:
+      tags: [Brands]
+      summary: Get brand by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Brand details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Brand'
+        '404':
+          description: Not found
+
+  /api/assets:
+    get:
+      tags: [Assets]
+      summary: List assets
+      responses:
+        '200':
+          description: Asset list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+
+  /api/assets/upload:
+    post:
+      tags: [Assets]
+      summary: Upload a file asset
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Upload successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/skills:
+    get:
+      tags: [Skills]
+      summary: List available AI skills
+      responses:
+        '200':
+          description: Skills list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Skill'
+
+  /api/usage:
+    get:
+      tags: [Usage]
+      summary: Get usage history
+      responses:
+        '200':
+          description: Usage data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/usage/current:
+    get:
+      tags: [Usage]
+      summary: Get current period usage
+      responses:
+        '200':
+          description: Current usage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokens:
+                    type: integer
+                  runs:
+                    type: integer
+                  period:
+                    type: string
+
+  /api/usage/limits:
+    post:
+      tags: [Usage]
+      summary: Set usage limits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                maxTokens:
+                  type: integer
+                maxRuns:
+                  type: integer
+      responses:
+        '200':
+          description: Limits updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /api/settings/api-key:
+    get:
+      tags: [Settings]
+      summary: Check if OpenAI API key is configured
+      responses:
+        '200':
+          description: Key status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasKey:
+                    type: boolean
+                  preview:
+                    type: string
+    post:
+      tags: [Settings]
+      summary: Set OpenAI API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [apiKey]
+              properties:
+                apiKey:
+                  type: string
+      responses:
+        '200':
+          description: Key saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+    delete:
+      tags: [Settings]
+      summary: Remove OpenAI API key
+      responses:
+        '200':
+          description: Key removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /api/settings/anthropic-key:
+    get:
+      tags: [Settings]
+      summary: Check if Anthropic API key is configured
+      responses:
+        '200':
+          description: Key status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasKey:
+                    type: boolean
+                  preview:
+                    type: string
+    post:
+      tags: [Settings]
+      summary: Set Anthropic API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [apiKey]
+              properties:
+                apiKey:
+                  type: string
+      responses:
+        '200':
+          description: Key saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /api/publish:
+    post:
+      tags: [Social Publishing]
+      summary: Publish content to a platform
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, content]
+              properties:
+                platform:
+                  type: string
+                  enum: [twitter, linkedin, facebook, instagram]
+                content:
+                  type: string
+                mediaUrl:
+                  type: string
+      responses:
+        '200':
+          description: Published
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  postId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/publish/multi:
+    post:
+      tags: [Social Publishing]
+      summary: Publish to multiple platforms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platforms, content]
+              properties:
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Results per platform
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/publish/queue:
+    get:
+      tags: [Social Publishing]
+      summary: List queued posts
+      responses:
+        '200':
+          description: Queue list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueuedPost'
+    post:
+      tags: [Social Publishing]
+      summary: Add post to queue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, content, scheduledAt]
+              properties:
+                platform:
+                  type: string
+                content:
+                  type: string
+                scheduledAt:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueuedPost'
+
+  /api/publish/queue/{id}:
+    delete:
+      tags: [Social Publishing]
+      summary: Remove post from queue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /api/publish/process:
+    post:
+      tags: [Social Publishing]
+      summary: Process queued posts now
+      responses:
+        '200':
+          description: Processing results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/publish/status:
+    get:
+      tags: [Social Publishing]
+      summary: Get publishing platform connection status
+      responses:
+        '200':
+          description: Platform statuses
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    connected:
+                      type: boolean
+
+  /mcp/tools:
+    get:
+      tags: [MCP]
+      summary: List available MCP tools
+      security: []
+      responses:
+        '200':
+          description: Tool list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MCPTool'
+
+  /mcp/tools/call:
+    post:
+      tags: [MCP]
+      summary: Call an MCP tool
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                arguments:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Tool result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                        text:
+                          type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /mcp/health:
+    get:
+      tags: [MCP]
+      summary: MCP server health
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications
+      responses:
+        '200':
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+
+  /api/notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /api/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      responses:
+        '200':
+          description: All marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /api/notifications/stream:
+    get:
+      tags: [Notifications]
+      summary: Stream notifications (SSE)
+      responses:
+        '200':
+          description: Server-Sent Events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/onboarding/status:
+    get:
+      tags: [Onboarding]
+      summary: Get onboarding status
+      responses:
+        '200':
+          description: Onboarding state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  completed:
+                    type: boolean
+                  steps:
+                    type: object
+                    additionalProperties:
+                      type: boolean
+
+  /api/onboarding/setup:
+    post:
+      tags: [Onboarding]
+      summary: Complete onboarding setup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                brandName:
+                  type: string
+                industry:
+                  type: string
+                apiKey:
+                  type: string
+      responses:
+        '200':
+          description: Setup complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/test-llm:
+    post:
+      tags: [System]
+      summary: Test LLM connectivity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+      responses:
+        '200':
+          description: LLM response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+
+    Pipeline:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              skill:
+                type: string
+              config:
+                type: object
+
+    RunSummary:
+      type: object
+      properties:
+        runId:
+          type: string
+        pipelineId:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+
+    Run:
+      allOf:
+        - $ref: '#/components/schemas/RunSummary'
+        - type: object
+          properties:
+            output:
+              type: object
+              additionalProperties: true
+            steps:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  status:
+                    type: string
+                  output:
+                    type: string
+            completedAt:
+              type: string
+              format: date-time
+
+    Brand:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        voice:
+          type: string
+        industry:
+          type: string
+        colors:
+          type: object
+        logoUrl:
+          type: string
+
+    BrandInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        voice:
+          type: string
+        industry:
+          type: string
+        colors:
+          type: object
+        logoUrl:
+          type: string
+
+    Asset:
+      type: object
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        mimeType:
+          type: string
+        size:
+          type: integer
+        url:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    Skill:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    QueuedPost:
+      type: object
+      properties:
+        id:
+          type: string
+        platform:
+          type: string
+        content:
+          type: string
+        scheduledAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+
+    MCPTool:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        inputSchema:
+          type: object
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        message:
+          type: string
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
