@@ -110,14 +110,16 @@ export function createBrand(userIdOrData: string | CreateBrandData, maybeData?: 
 export function getBrand(id: string, userId?: string): BrandProfile | undefined {
   const brand = brands.get(id);
   if (!brand) return undefined;
-  if (userId && brand.userId !== userId) return undefined;
+  // Global/legacy brands are accessible to all users
+  if (userId && brand.userId && brand.userId !== 'legacy' && brand.userId !== userId) return undefined;
   return brand;
 }
 
 export function listBrands(userId?: string): BrandProfile[] {
   const all = Array.from(brands.values());
   if (!userId) return all;
-  return all.filter(brand => brand.userId === userId);
+  // Include global/legacy brands plus user's own brands
+  return all.filter(brand => !brand.userId || brand.userId === 'legacy' || brand.userId === userId);
 }
 
 export function updateBrand(id: string, userId: string, updates: Partial<BrandProfile>): BrandProfile | undefined;

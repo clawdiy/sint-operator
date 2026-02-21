@@ -13,6 +13,8 @@ const setupSchema = z.object({
 });
 
 function getUserId(req: AuthenticatedRequest): string | null {
+  // When auth is disabled, use default user
+  if (process.env.AUTH_ENABLED !== 'true') return 'default';
   return req.user?.userId ?? null;
 }
 
