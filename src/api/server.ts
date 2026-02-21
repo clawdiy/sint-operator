@@ -775,6 +775,45 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     res.json(updated);
   });
 
+
+  // ─── Quick Templates ───────────────────────────────────────
+  const QUICK_TEMPLATES = [
+    { id: 'product-launch', name: 'Product Launch', description: 'Generate launch posts for all platforms', platforms: ['twitter', 'linkedin', 'instagram'], inputs: ['product_name', 'key_feature', 'launch_date'] },
+    { id: 'thought-leadership', name: 'Thought Leadership', description: 'Create thought leadership content from an insight', platforms: ['twitter', 'linkedin'], inputs: ['insight', 'industry'] },
+    { id: 'case-study', name: 'Case Study Posts', description: 'Turn a case study into social proof posts', platforms: ['twitter', 'linkedin'], inputs: ['client_name', 'result', 'how'] },
+    { id: 'weekly-roundup', name: 'Weekly Roundup', description: 'Create a weekly industry roundup', platforms: ['twitter', 'linkedin', 'email'], inputs: ['industry', 'top_stories'] },
+    { id: 'behind-scenes', name: 'Behind the Scenes', description: 'Humanize your brand with BTS content', platforms: ['instagram', 'twitter', 'tiktok'], inputs: ['what_happened', 'team_member'] },
+    { id: 'faq-content', name: 'FAQ to Content', description: 'Turn FAQs into engaging social posts', platforms: ['twitter', 'linkedin', 'instagram'], inputs: ['question', 'answer'] },
+  ];
+
+  app.get('/api/templates', (_req, res) => {
+    res.json(QUICK_TEMPLATES);
+  });
+
+  app.post('/api/templates/:id/generate', async (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+    
+    const template = QUICK_TEMPLATES.find(t => t.id === req.params.id);
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+    
+    const { brandId, ...inputs } = req.body;
+    if (!brandId) return res.status(400).json({ error: 'brandId is required' });
+    
+    // Use content-repurpose pipeline with template-specific prompt
+    const content = Object.entries(inputs).map(([k, v]) => \`\${k}: \${v}\`).join('\n');
+    const runId = enqueueAsyncRun(
+      'content-repurpose',
+      brandId,
+      user,
+      \`Template: \${template.name}\n\${content}\`,
+      { target_platforms: template.platforms },
+      orchestrator
+    );
+    
+    res.json({ runId, template: template.id, status: 'queued' });
+  });
+
 app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
