@@ -14,6 +14,29 @@ const LEVEL_LABELS: Record<string, string> = {
   L3: 'Premium',
 };
 
+
+const SKILL_ICONS: Record<string, string> = {
+  'asset-ingester': '📥',
+  'content-analyzer': '🧠',
+  'content-repurpose': '🔄',
+  'seo-blog': '📝',
+  'social-calendar': '📅',
+  'platform-formatter': '✍️',
+  'video-clipper': '🎬',
+  'linkedin-writer': '💼',
+  'output-packager': '📦',
+  'brand-researcher': '🔍',
+  'serp-scraper': '🌐',
+  'seo-optimizer': '📊',
+  'notifier': '🔔',
+  'newsletter': '📰',
+  'competitor-analyzer': '🏆',
+};
+
+function getSkillIcon(name: string): string {
+  return SKILL_ICONS[name] || '⚙️';
+}
+
 export default function Skills() {
   const [loading, setLoading] = useState(true);
   const [skills, setSkills] = useState<any[]>([]);
@@ -81,7 +104,7 @@ export default function Skills() {
           filtered.map((s: any) => (
             <div key={s.name} className="card skill-card">
               <div className="skill-header">
-                <h3 style={{ margin: 0 }}>{s.name}</h3>
+                <h3 style={{ margin: 0 }}>{getSkillIcon(s.name)} {s.name.replace(/-/g, ' ')}</h3>
                 <span
                   className="badge"
                   style={{ background: `${LEVEL_COLORS[s.level] ?? 'var(--accent)'}20`, color: LEVEL_COLORS[s.level] ?? 'var(--accent)' }}
@@ -93,7 +116,7 @@ export default function Skills() {
               <div className="skill-meta">
                 <span>v{s.version}</span>
                 <span>•</span>
-                <span>{s.costUnits} CU</span>
+                <span>{s.costUnits} credits</span>
               </div>
             </div>
           ))
