@@ -3068,3 +3068,9 @@ input:focus, textarea:focus, select:focus {
   .sidebar, .top-bar, .btn, .nav-item { display: none !important; }
   .content { margin: 0 !important; padding: 0 !important; }
 }
+
+/* Empty state action button */
+.empty-action { margin-top: 16px; }
+
+/* Toast close button positioning */
+.toast { padding-right: 36px; }

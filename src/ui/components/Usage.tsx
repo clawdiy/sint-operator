@@ -172,9 +172,9 @@ export default function Usage() {
       {!usage && (
         <div className="card">
           <div className="empty-state">
-            <div className="empty-icon">📈</div>
+            <div className="empty-icon">📊</div>
             <div className="empty-title">No usage data yet</div>
-            <div className="empty-desc">Run some pipelines and usage statistics will appear here.</div>
+            <div className="empty-desc">No usage data yet — run some pipelines to see your stats here.</div>
           </div>
         </div>
       )}

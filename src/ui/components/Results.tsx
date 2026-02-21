@@ -258,9 +258,9 @@ export default function Results() {
           </div>
           {runs.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon">📋</div>
+              <div className="empty-icon">🚀</div>
               <div className="empty-title">No runs yet</div>
-              <div className="empty-desc">Run a pipeline from the Dashboard to see results here.</div>
+              <div className="empty-desc">Generate your first content from the Dashboard — results will appear here automatically.</div>
             </div>
           ) : filteredRuns.length === 0 ? (
             <div className="empty-state">
