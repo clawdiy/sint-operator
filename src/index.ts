@@ -5,6 +5,15 @@
  * metering with hard stops, and audit trail.
  */
 
+import dotenv from 'dotenv';
+// Load .env — override only empty-string env vars (e.g. ANTHROPIC_API_KEY='' in shell)
+const _dotenvResult = dotenv.config();
+if (_dotenvResult.parsed) {
+  for (const [k, v] of Object.entries(_dotenvResult.parsed)) {
+    if (process.env[k] === '' || process.env[k] === undefined) process.env[k] = v;
+  }
+}
+
 import { resolve } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { Orchestrator } from './orchestrator/index.js';

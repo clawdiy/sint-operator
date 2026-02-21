@@ -2,6 +2,14 @@
  * SINT CLI — Quick pipeline execution from command line
  */
 
+import dotenv from 'dotenv';
+const _dotenvResult = dotenv.config();
+if (_dotenvResult.parsed) {
+  for (const [k, v] of Object.entries(_dotenvResult.parsed)) {
+    if (process.env[k] === '' || process.env[k] === undefined) process.env[k] = v;
+  }
+}
+
 import { Command } from 'commander';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
