@@ -45,6 +45,7 @@ export interface OrchestratorConfig {
   dataDir: string;
   configDir: string;
   openaiApiKey: string;
+  anthropicApiKey?: string;
   openaiBaseUrl?: string;
   models: ModelConfig;
   embeddingModel?: string;
@@ -65,6 +66,7 @@ export class Orchestrator {
     // Initialize LLM Router with model tiers
     this.llm = new LLMRouterImpl({
       apiKey: config.openaiApiKey,
+      anthropicApiKey: config.anthropicApiKey,
       baseUrl: config.openaiBaseUrl,
       models: config.models,
       embeddingModel: config.embeddingModel,
@@ -427,6 +429,20 @@ export class Orchestrator {
   }
 
   // ─── Cleanup ──────────────────────────────────────────────
+
+  updateApiKeys(openaiKey?: string, anthropicKey?: string): void {
+    if (openaiKey) this.config.openaiApiKey = openaiKey;
+    if (anthropicKey) this.config.anthropicApiKey = anthropicKey;
+    this.llm = new LLMRouterImpl({
+      apiKey: this.config.openaiApiKey,
+      anthropicApiKey: this.config.anthropicApiKey,
+      baseUrl: this.config.openaiBaseUrl,
+      models: this.config.models,
+      embeddingModel: this.config.embeddingModel,
+    });
+    this.tools = createToolServices(this.config.openaiApiKey, this.config.openaiBaseUrl);
+    console.log('🔄 LLM Router reinitialized with updated API keys');
+  }
 
   shutdown(): void {
     this.memory.close();

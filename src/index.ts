@@ -16,6 +16,7 @@ const CONFIG_DIR = resolve(process.env.SINT_CONFIG_DIR ?? './config');
 const PORT = parseInt(process.env.PORT ?? process.env.SINT_PORT ?? '18789', 10);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
 
 // Model routing configuration
 const MODELS: ModelConfig = {
@@ -24,9 +25,9 @@ const MODELS: ModelConfig = {
   fallback: process.env.SINT_MODEL_FALLBACK ?? 'kimi-k2.5',
 };
 
-if (!OPENAI_API_KEY) {
-  console.warn('⚠️  OPENAI_API_KEY not set. API will load but LLM calls will fail.');
-  console.warn('   Set OPENAI_API_KEY in environment variables to enable AI features.');
+if (!OPENAI_API_KEY && !ANTHROPIC_API_KEY) {
+  console.warn('⚠️  No API keys set. LLM calls will run in dry-run mode.');
+  console.warn('   Set OPENAI_API_KEY and/or ANTHROPIC_API_KEY to enable AI features.');
 }
 
 // Ensure directories
@@ -47,6 +48,9 @@ console.log(`
 ║    Complex:  ${MODELS.complex.padEnd(35)}║
 ║    Routine:  ${MODELS.routine.padEnd(35)}║
 ║    Fallback: ${MODELS.fallback.padEnd(35)}║
+║  API Keys:                                      ║
+║    OpenAI:    ${(OPENAI_API_KEY ? '✅ configured' : '❌ not set').padEnd(35)}║
+║    Anthropic: ${(ANTHROPIC_API_KEY ? '✅ configured' : '❌ not set').padEnd(35)}║
 ╚══════════════════════════════════════════════════╝
 `);
 
@@ -54,6 +58,7 @@ const orchestrator = new Orchestrator({
   dataDir: DATA_DIR,
   configDir: CONFIG_DIR,
   openaiApiKey: OPENAI_API_KEY,
+  anthropicApiKey: ANTHROPIC_API_KEY,
   openaiBaseUrl: OPENAI_BASE_URL,
   models: MODELS,
 });

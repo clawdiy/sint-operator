@@ -393,6 +393,8 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       storeApiKey(user.userId, payload.apiKey);
       // Also set as env var for LLM router
       process.env.OPENAI_API_KEY = payload.apiKey;
+      // Hot-reload: reinitialize LLM router with new key
+      orchestrator.updateApiKeys(payload.apiKey, undefined);
       res.json({ success: true, masked: maskApiKey(payload.apiKey) });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -453,6 +455,8 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       storeApiKey(user.userId + ':anthropic', payload.apiKey);
       // Also set as env var for LLM router
       process.env.ANTHROPIC_API_KEY = payload.apiKey;
+      // Hot-reload: reinitialize LLM router with new key
+      orchestrator.updateApiKeys(undefined, payload.apiKey);
       res.json({ success: true, masked: maskApiKey(payload.apiKey) });
     } catch (error) {
       if (error instanceof ZodError) {

@@ -15,6 +15,7 @@
  */
 
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import type {
   LLMRouter, LLMOptions, LLMResponse, LLMResponseMeta,
   ModelConfig, ModelTier, ModelRouting,
@@ -55,6 +56,7 @@ const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 529];
 
 export interface LLMRouterConfig {
   apiKey: string;
+  anthropicApiKey?: string;
   baseUrl?: string;
   models: ModelConfig;
   embeddingModel?: string;
@@ -64,8 +66,8 @@ export interface LLMRouterConfig {
 /**
  * Check if we should run in dry-run mode (no real LLM calls).
  */
-function isDryRun(apiKey: string): boolean {
-  return !apiKey || apiKey === 'sk-test' || apiKey.trim() === '';
+function isDryRunKey(key: string): boolean {
+  return !key || key === 'sk-test' || key.trim() === '';
 }
 
 /**
@@ -298,28 +300,51 @@ async function withRetry<T>(
 
 export class LLMRouterImpl implements LLMRouter {
   private client: OpenAI;
+  private anthropicClient: Anthropic | null;
   private models: ModelConfig;
   private embeddingModel: string;
   private totalTokens = 0;
   private totalCostUnits = 0;
   private dryRunMode: boolean;
   private apiKey: string;
+  private anthropicApiKey: string;
 
   constructor(config: LLMRouterConfig) {
     this.apiKey = config.apiKey;
-    this.dryRunMode = isDryRun(config.apiKey);
+    this.anthropicApiKey = config.anthropicApiKey ?? '';
+    const openaiDry = isDryRunKey(config.apiKey);
+    const anthropicDry = isDryRunKey(this.anthropicApiKey);
+    this.dryRunMode = openaiDry && anthropicDry;
 
     this.client = new OpenAI({
       apiKey: config.apiKey || 'sk-placeholder',
       baseURL: config.baseUrl,
       maxRetries: config.maxRetries ?? 3,
     });
+
+    this.anthropicClient = !anthropicDry
+      ? new Anthropic({ apiKey: this.anthropicApiKey })
+      : null;
+
     this.models = config.models;
     this.embeddingModel = config.embeddingModel ?? 'text-embedding-3-small';
 
     if (this.dryRunMode) {
-      console.log('🔸 LLM Router: DRY-RUN mode (no real API calls). Set OPENAI_API_KEY for live mode.');
+      console.log('🔸 LLM Router: DRY-RUN mode (no real API calls). Set OPENAI_API_KEY or ANTHROPIC_API_KEY for live mode.');
+    } else {
+      const providers = [];
+      if (!openaiDry) providers.push('OpenAI');
+      if (!anthropicDry) providers.push('Anthropic');
+      console.log(`🟢 LLM Router: LIVE mode (${providers.join(' + ')})`);
     }
+  }
+
+  private isAnthropicModel(model: string): boolean {
+    return model.startsWith('claude');
+  }
+
+  private hasAnthropicClient(): boolean {
+    return this.anthropicClient !== null;
   }
 
   /** Check if running in dry-run mode */
@@ -400,7 +425,7 @@ export class LLMRouterImpl implements LLMRouter {
     // Dry-run mode: return mock response
     if (this.dryRunMode) {
       return {
-        text: '[Mock response — configure OPENAI_API_KEY for real output]',
+        text: '[Mock response — configure OPENAI_API_KEY or ANTHROPIC_API_KEY for real output]',
         meta: {
           model: 'dry-run',
           tier,
@@ -413,15 +438,59 @@ export class LLMRouterImpl implements LLMRouter {
       };
     }
 
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-    if (options?.systemPrompt) {
-      messages.push({ role: 'system', content: options.systemPrompt });
-    }
-    messages.push({ role: 'user', content: prompt });
-
     const timeoutMs = this.getTimeoutForTier(tier);
 
     try {
+      // Route to Anthropic SDK for Claude models
+      if (this.isAnthropicModel(model) && this.hasAnthropicClient()) {
+        const response = await withRetry(async () => {
+          const timeout = createTimeoutSignal(timeoutMs);
+          try {
+            const resp = await this.anthropicClient!.messages.create({
+              model,
+              max_tokens: options?.maxTokens ?? 4096,
+              system: options?.systemPrompt || undefined,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: options?.temperature ?? 0.7,
+            });
+            timeout.clear();
+            return resp;
+          } finally {
+            timeout.clear();
+          }
+        }, `complete(${model})`);
+
+        const inputTokens = response.usage?.input_tokens ?? 0;
+        const outputTokens = response.usage?.output_tokens ?? 0;
+        const totalTokens = inputTokens + outputTokens;
+        const costUnits = this.calculateCost(model, totalTokens);
+
+        this.totalTokens += totalTokens;
+        this.totalCostUnits += costUnits;
+
+        const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+
+        return {
+          text,
+          meta: {
+            model,
+            tier,
+            inputTokens,
+            outputTokens,
+            totalTokens,
+            costUnits,
+            durationMs: Date.now() - start,
+          },
+        };
+      }
+
+      // OpenAI path
+      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+      if (options?.systemPrompt) {
+        messages.push({ role: 'system', content: options.systemPrompt });
+      }
+      messages.push({ role: 'user', content: prompt });
+
       const response = await withRetry(async () => {
         const timeout = createTimeoutSignal(timeoutMs);
         try {
@@ -527,50 +596,80 @@ export class LLMRouterImpl implements LLMRouter {
       };
     }
 
-    const systemPrompt = [
+    const jsonSystemPrompt = [
       options?.systemPrompt ?? '',
       '\nYou MUST respond with valid JSON matching the following schema.',
       'Do NOT include markdown code fences or any text outside the JSON.',
+      'Output ONLY the JSON object, nothing else.',
       `\nSchema:\n${JSON.stringify(schema, null, 2)}`,
     ].join('\n');
-
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: prompt },
-    ];
 
     const timeoutMs = this.getTimeoutForTier(tier);
 
     try {
-      const response = await withRetry(async () => {
-        const timeout = createTimeoutSignal(timeoutMs);
-        try {
-          const resp = await this.client.chat.completions.create(
-            {
-              model,
-              messages,
-              temperature: options?.temperature ?? 0.3,
-              max_tokens: options?.maxTokens ?? 4096,
-              response_format: { type: 'json_object' },
-            },
-            { signal: timeout.signal }
-          );
-          timeout.clear();
-          return resp;
-        } finally {
-          timeout.clear();
-        }
-      }, `completeJSON(${model})`);
+      let text: string;
+      let inputTokens: number;
+      let outputTokens: number;
 
-      const inputTokens = response.usage?.prompt_tokens ?? 0;
-      const outputTokens = response.usage?.completion_tokens ?? 0;
+      if (this.isAnthropicModel(model) && this.hasAnthropicClient()) {
+        // Anthropic path — no response_format, use strong system prompt
+        const response = await withRetry(async () => {
+          const timeout = createTimeoutSignal(timeoutMs);
+          try {
+            const resp = await this.anthropicClient!.messages.create({
+              model,
+              max_tokens: options?.maxTokens ?? 4096,
+              system: jsonSystemPrompt,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: options?.temperature ?? 0.3,
+            });
+            timeout.clear();
+            return resp;
+          } finally {
+            timeout.clear();
+          }
+        }, `completeJSON(${model})`);
+
+        inputTokens = response.usage?.input_tokens ?? 0;
+        outputTokens = response.usage?.output_tokens ?? 0;
+        text = response.content[0]?.type === 'text' ? response.content[0].text : '{}';
+      } else {
+        // OpenAI path
+        const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+          { role: 'system', content: jsonSystemPrompt },
+          { role: 'user', content: prompt },
+        ];
+
+        const response = await withRetry(async () => {
+          const timeout = createTimeoutSignal(timeoutMs);
+          try {
+            const resp = await this.client.chat.completions.create(
+              {
+                model,
+                messages,
+                temperature: options?.temperature ?? 0.3,
+                max_tokens: options?.maxTokens ?? 4096,
+                response_format: { type: 'json_object' },
+              },
+              { signal: timeout.signal }
+            );
+            timeout.clear();
+            return resp;
+          } finally {
+            timeout.clear();
+          }
+        }, `completeJSON(${model})`);
+
+        inputTokens = response.usage?.prompt_tokens ?? 0;
+        outputTokens = response.usage?.completion_tokens ?? 0;
+        text = response.choices[0]?.message?.content ?? '{}';
+      }
+
       const totalTokens = inputTokens + outputTokens;
       const costUnits = this.calculateCost(model, totalTokens);
 
       this.totalTokens += totalTokens;
       this.totalCostUnits += costUnits;
-
-      const text = response.choices[0]?.message?.content ?? '{}';
       let parsed: T;
       try {
         parsed = JSON.parse(text) as T;

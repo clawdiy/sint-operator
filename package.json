@@ -1,7 +1,7 @@
 {
   "name": "@sint/marketing-operator",
   "version": "0.5.0",
-  "description": "SINT Marketing Agent Operator \u2014 Upload one asset, get dozens of platform-ready deliverables",
+  "description": "SINT Marketing Agent Operator — Upload one asset, get dozens of platform-ready deliverables",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -17,6 +17,7 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "better-sqlite3": "^11.7.0",
     "chromadb": "^1.9.2",
     "commander": "^12.1.0",
