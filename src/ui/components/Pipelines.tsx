@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPipelines, getBrands, runPipelineAndWait } from '../api';
+import { getPipelines, getBrands, runPipeline, isAsyncRunStart, streamRun } from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
 
@@ -45,6 +45,7 @@ export default function Pipelines() {
   const [runStatus, setRunStatus] = useState('');
   const [result, setResult] = useState<any>(null);
   const [copiedResult, setCopiedResult] = useState(false);
+  const [streamSteps, setStreamSteps] = useState<any[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -139,11 +140,25 @@ export default function Pipelines() {
         return;
       }
 
-      const res = await runPipelineAndWait(selected.id, brandId, parsedInputs, {
-        onStatus: status => setRunStatus(status),
-      });
-      setResult(res);
-      addToast('success', `Pipeline "${selected.name}" completed!`);
+      const started = await runPipeline(selected.id, brandId, parsedInputs);
+      if (isAsyncRunStart(started)) {
+        setRunStatus('running');
+        setStreamSteps([]);
+        await new Promise<void>((resolve, reject) => {
+          streamRun(started.runId, {
+            onStep: (step) => {
+              setStreamSteps(prev => [...prev, step]);
+              setRunStatus(step.data?.name || 'running');
+            },
+            onComplete: (data) => { setResult(data); resolve(); },
+            onError: (err) => reject(new Error(err)),
+          });
+        });
+        addToast('success', `Pipeline "${selected.name}" completed!`);
+      } else {
+        setResult(started);
+        addToast('success', `Pipeline "${selected.name}" completed!`);
+      }
     } catch (err: any) {
       addToast('error', err.message || 'Pipeline execution failed');
     } finally {
@@ -300,6 +315,16 @@ export default function Pipelines() {
                   Executing pipeline... current status: <strong>{runStatus || 'starting'}</strong>
                 </div>
                 <div className="progress-bar"><div className="progress-bar-fill" /></div>
+                {streamSteps.length > 0 && (
+                  <div className="sse-steps" style={{ marginTop: '12px' }}>
+                    {streamSteps.map((s, i) => (
+                      <div key={i} className={"sse-step " + (s.type === 'step_complete' ? 'done' : 'active')}>
+                        <span>{s.type === 'step_complete' ? '✅' : '⏳'}</span>
+                        <span>{s.data?.name || s.data?.step || ('Step ' + (i + 1))}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

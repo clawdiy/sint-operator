@@ -221,3 +221,33 @@ export const getUsage = (days?: number) => request<{
 }>(`/api/usage${days ? `?days=${days}` : ''}`);
 
 export const getCurrentUsage = () => request<any>('/api/usage/current');
+
+// Notifications
+export const getNotifications = (unreadOnly?: boolean) =>
+  request<Array<{id: string; type: string; title: string; message: string; read: boolean; createdAt: string; runId?: string}>>(
+    `/api/notifications${unreadOnly ? '?unread=true' : ''}`
+  );
+export const markNotificationRead = (id: string) => request<any>(`/api/notifications/${id}/read`, { method: 'POST' });
+export const markAllNotificationsRead = () => request<any>('/api/notifications/read-all', { method: 'POST' });
+
+// SSE Run Streaming
+export function streamRun(runId: string, handlers: {
+  onStep?: (step: any) => void;
+  onComplete?: (result: any) => void;
+  onError?: (error: string) => void;
+}): () => void {
+  const source = new EventSource(`/api/runs/${runId}/stream`);
+  source.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'step_start' || data.type === 'step_complete') handlers.onStep?.(data);
+    if (data.type === 'complete') { handlers.onComplete?.(data.data); source.close(); }
+    if (data.type === 'error') { handlers.onError?.(data.data?.error || 'Unknown error'); source.close(); }
+  };
+  source.onerror = () => { source.close(); };
+  return () => source.close();
+}
+
+// Onboarding
+export const getOnboardingStatus = () => request<{needsSetup: boolean; hasApiKey: boolean; hasBrand: boolean}>('/api/onboarding/status');
+export const completeOnboarding = (data: {openaiApiKey: string; brandName: string; brandUrl?: string; brandTone?: string[]}) =>
+  request<any>('/api/onboarding/setup', { method: 'POST', body: JSON.stringify(data) });

@@ -9,6 +9,7 @@ import Usage from './components/Usage';
 import Skills from './components/Skills';
 import Settings from './components/Settings';
 import ErrorBoundary from './components/ErrorBoundary';
+import Onboarding from './components/Onboarding';
 import { ToastProvider } from './components/Toast';
 
 type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings';
@@ -21,6 +22,7 @@ function getPageFromHash(): Page {
 
 export default function App() {
   const [page, setPage] = useState<Page>(getPageFromHash);
+  const [refreshKey, setRefreshKey] = React.useState(0);
 
   React.useEffect(() => {
     const handler = () => setPage(getPageFromHash());
@@ -50,8 +52,9 @@ export default function App() {
   return (
     <ToastProvider>
       <ErrorBoundary>
+        <Onboarding onComplete={() => setRefreshKey(k => k + 1)} />
         <Layout currentPage={page} onNavigate={navigate}>
-          {renderPage()}
+          <React.Fragment key={refreshKey}>{renderPage()}</React.Fragment>
         </Layout>
       </ErrorBoundary>
     </ToastProvider>

@@ -1,4 +1,5 @@
 import React from 'react';
+import NotificationBell from './NotificationBell';
 
 type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings';
 
@@ -50,9 +51,15 @@ export default function Layout({ currentPage, onNavigate, children }: Props) {
           {!collapsed && <span className="version">v0.5.0</span>}
         </div>
       </aside>
-      <main className="content">
-        {children}
-      </main>
+      <div className="main-area">
+          <header className="top-bar">
+            <div />
+            <NotificationBell />
+          </header>
+          <main className="content">
+            {children}
+          </main>
+        </div>
     </div>
   );
 }

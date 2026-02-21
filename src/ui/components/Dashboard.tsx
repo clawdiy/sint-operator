@@ -11,6 +11,7 @@ import {
   normalizeRunPayload,
   isAsyncRunStart,
   isRunInProgress,
+  streamRun,
 } from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
@@ -59,6 +60,7 @@ export default function Dashboard({ onNavigate }: Props) {
   const [calLoading, setCalLoading] = useState(false);
   const [refreshingRuns, setRefreshingRuns] = useState(false);
   const [cancelingRunId, setCancelingRunId] = useState('');
+  const [streamSteps, setStreamSteps] = useState<any[]>([]);
 
   const loadData = useCallback(() => {
     Promise.all([
@@ -127,7 +129,13 @@ export default function Dashboard({ onNavigate }: Props) {
     try {
       const started = await repurposeContent(repurposeBrand, repurposeText, repurposePlatforms);
       if (isAsyncRunStart(started)) {
-        addToast('info', `Repurpose queued (${started.runId.slice(-6)}). Tracking in Live Activity.`);
+        addToast('info', `Repurpose queued (${started.runId.slice(-6)}). Tracking via SSE.`);
+        setStreamSteps([]);
+        streamRun(started.runId, {
+          onStep: (step) => setStreamSteps(prev => [...prev, step]),
+          onComplete: () => { addToast('success', 'Repurpose completed!'); loadData(); },
+          onError: (err) => addToast('error', err),
+        });
       } else {
         addToast('success', 'Content repurposing started.');
       }
@@ -150,7 +158,13 @@ export default function Dashboard({ onNavigate }: Props) {
       const kw = blogKeywords.split(',').map(s => s.trim()).filter(Boolean);
       const started = await generateBlog(blogBrand, blogTopic, kw);
       if (isAsyncRunStart(started)) {
-        addToast('info', `Blog queued (${started.runId.slice(-6)}). Tracking in Live Activity.`);
+        addToast('info', `Blog queued (${started.runId.slice(-6)}). Tracking via SSE.`);
+        setStreamSteps([]);
+        streamRun(started.runId, {
+          onStep: (step) => setStreamSteps(prev => [...prev, step]),
+          onComplete: () => { addToast('success', 'Blog generated!'); loadData(); },
+          onError: (err) => addToast('error', err),
+        });
       } else {
         addToast('success', 'Blog generation started.');
       }
@@ -174,7 +188,13 @@ export default function Dashboard({ onNavigate }: Props) {
       const themes = calThemes.split(',').map(s => s.trim()).filter(Boolean);
       const started = await generateCalendar(calBrand, calDays, themes);
       if (isAsyncRunStart(started)) {
-        addToast('info', `Calendar queued (${started.runId.slice(-6)}). Tracking in Live Activity.`);
+        addToast('info', `Calendar queued (${started.runId.slice(-6)}). Tracking via SSE.`);
+        setStreamSteps([]);
+        streamRun(started.runId, {
+          onStep: (step) => setStreamSteps(prev => [...prev, step]),
+          onComplete: () => { addToast('success', 'Calendar generated!'); loadData(); },
+          onError: (err) => addToast('error', err),
+        });
       } else {
         addToast('success', 'Calendar generation started.');
       }
@@ -435,6 +455,20 @@ export default function Dashboard({ onNavigate }: Props) {
           {calLoading && <div className="progress-bar"><div className="progress-bar-fill" /></div>}
         </div>
       </div>
+
+      {streamSteps.length > 0 && (
+        <div className="card sse-steps-card">
+          <h3 style={{ margin: '0 0 12px' }}>🔄 Live Progress</h3>
+          <div className="sse-steps">
+            {streamSteps.map((s, i) => (
+              <div key={i} className={"sse-step " + (s.type === 'step_complete' ? 'done' : 'active')}>
+                <span>{s.type === 'step_complete' ? '✅' : '⏳'}</span>
+                <span>{s.data?.name || s.data?.step || ('Step ' + (i + 1))}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent Runs */}
       <h2>Recent Runs</h2>

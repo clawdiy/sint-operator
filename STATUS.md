@@ -1,53 +1,51 @@
-# Lane 3: Integrations — Status
+# SINT Marketing Operator — v0.5.0 Status
 
-## Done ✅
-- [x] GitHub Actions CI — build + test + type check on push/PR
-- [x] Twitter/X client — OAuth 1.0a, tweets, threads, delete
-- [x] LinkedIn client — OAuth 2.0, posts, articles, token verify
-- [x] Social publishing manager — unified interface, queue, multi-platform
-- [x] Publish API routes — 7 endpoints at `/api/publish/*`
-- [x] 7 content deliverables in `docs/content-deliverables/`
-- [x] All 8 skill prompts rewritten
-- [x] 4 template brands (SaaS, E-commerce, B2B, Creator)
-- [x] Multi-stage Dockerfile + docker-compose
-- [x] Newsletter Generator skill (NEW)
-- [x] Competitor Content Analyzer skill (NEW)
-- [x] Telegram notification service (pipeline complete alerts)
-- [x] MCP Skill Server — exposes all 15 skills as MCP tools
-- [x] Generic `runSkill()` method on Orchestrator
-- [x] README updated
+## What's Live
+- ✅ 15 skills registered and operational
+- ✅ 7 YAML pipelines (all referencing valid skills)
+- ✅ 5 brand profiles (1 custom + 4 templates)
+- ✅ Dual LLM routing (Anthropic + OpenAI with hot-reload)
+- ✅ React SPA with dark theme UI
+- ✅ Dashboard with 3 quick actions
+- ✅ Pipeline runner with dynamic inputs
+- ✅ Results viewer with platform tabs, export (MD/JSON)
+- ✅ Brand manager with create/view/detail
+- ✅ Settings with dual API key management
+- ✅ Usage/metering dashboard
+- ✅ Social publishing API (Twitter + LinkedIn)
+- ✅ MCP skill server (15 skills as MCP tools)
+- ✅ Telegram notifications on pipeline completion
+- ✅ SSE run streaming endpoint
+- ✅ Notification system with SSE
+- ✅ Optional JWT auth with user isolation
+- ✅ GitHub Actions CI pipeline
+- ✅ Multi-stage Dockerfile + docker-compose
+- ✅ Railway deployment (railway.toml)
+- ✅ 96 tests across 8 files
 
-## New API Endpoints
-```
-POST   /api/publish           — Publish to single platform
-POST   /api/publish/multi     — Publish to multiple platforms
-POST   /api/publish/queue     — Add to publish queue
-POST   /api/publish/process   — Process pending queue items
-GET    /api/publish/queue     — Get queue items
-DELETE /api/publish/queue/:id — Cancel queued item
-GET    /api/publish/status    — Check configured platforms
-GET    /mcp/tools             — List MCP tools (skill discovery)
-POST   /mcp/tools/call        — Call MCP tool (skill execution)
-GET    /mcp/health            — MCP health check
-```
+## Deployed
+- **URL:** https://sint-operator-production.up.railway.app
+- **Builder:** Dockerfile (multi-stage)
+- **Health:** GET /health
 
-## New Env Vars
-```
-TWITTER_API_KEY=
-TWITTER_API_SECRET=
-TWITTER_ACCESS_TOKEN=
-TWITTER_ACCESS_SECRET=
-LINKEDIN_ACCESS_TOKEN=
-LINKEDIN_PERSON_URN=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-DASHBOARD_URL=
-JWT_SECRET=
-```
+## API Endpoints: 30+
+- 3 quick action endpoints
+- 5 pipeline endpoints  
+- 5 run endpoints (incl SSE stream)
+- 3 brand endpoints
+- 7 social publishing endpoints
+- 3 MCP endpoints
+- 4 settings endpoints
+- 4 notification endpoints (incl SSE)
+- 3 onboarding endpoints
+- 2 usage endpoints
+- 2 asset endpoints
+- 1 health endpoint
 
-## Stats
-- 15 skills (was 13)
-- 7 pipelines
-- 10 new API endpoints
-- Social publishing: Twitter + LinkedIn
-- MCP: all skills exposed as tools
+## Tech Stack
+- **Runtime:** Node.js 22 + TypeScript
+- **Frontend:** React 18 + Vite
+- **Backend:** Express
+- **LLMs:** Anthropic SDK + OpenAI SDK
+- **Storage:** SQLite (memory + metering), in-memory (runs)
+- **Deploy:** Docker, Railway, GitHub Actions
