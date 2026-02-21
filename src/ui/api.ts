@@ -276,3 +276,14 @@ export const publishContent = (platform: string, content: string, hashtags?: str
 
 export const getPublishStatus = () =>
   request<{platforms: Record<string, {configured: boolean; handle?: string}>}>('/api/publish/status');
+
+export const getDeadLetterQueue = (filters?: { brandId?: string; limit?: number }) => {
+  const params = new URLSearchParams();
+  if (filters?.brandId) params.set('brandId', filters.brandId);
+  if (typeof filters?.limit === 'number') params.set('limit', String(filters.limit));
+  const query = params.toString();
+  return request<{items: Array<any>; total: number}>(query ? `/api/publish/dead-letter?${query}` : '/api/publish/dead-letter');
+};
+
+export const retryDeadLetterItem = (id: string) =>
+  request<{retried: boolean; item: any}>(`/api/publish/retry/${id}`, { method: 'POST' });

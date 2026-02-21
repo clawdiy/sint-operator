@@ -6,6 +6,8 @@
  * POST /api/publish/queue    — Add to publish queue
  * POST /api/publish/process  — Process pending queue items
  * GET  /api/publish/queue    — Get queue items
+ * GET  /api/publish/dead-letter — Get permanently failed queue items
+ * POST /api/publish/retry/:id — Retry a failed queue item
  * DELETE /api/publish/queue/:id — Cancel queued item
  * GET  /api/publish/status   — Check configured platforms
  */
@@ -18,6 +20,7 @@ import {
   processQueue,
   getQueue,
   cancelQueueItem,
+  retryQueueItem,
   getConfiguredPlatforms,
   verifyAllTokens,
   type PublishRequest,
@@ -38,6 +41,12 @@ export function createPublishRoutes(): Router {
   function getRequestUserId(req: AuthenticatedRequest): string | null {
     if (process.env.AUTH_ENABLED !== 'true') return 'default';
     return req.user?.userId ?? null;
+  }
+
+  function parseLimit(raw: unknown, fallback: number): number {
+    const parsed = Number.parseInt(String(raw ?? ''), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.min(parsed, 250);
   }
 
   // Publish immediately to a single platform
@@ -147,8 +156,49 @@ export function createPublishRoutes(): Router {
         userId,
         status: status as string | undefined,
         brandId: brandId as string | undefined,
+        limit: parseLimit(req.query.limit, 100),
       });
       res.json({ items, total: items.length });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  router.get('/dead-letter', (req, res) => {
+    try {
+      const userId = getRequestUserId(req as AuthenticatedRequest);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const { brandId } = req.query;
+      const items = getQueue({
+        userId,
+        status: 'failed',
+        brandId: brandId as string | undefined,
+        limit: parseLimit(req.query.limit, 100),
+      });
+      res.json({ items, total: items.length });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  router.post('/retry/:id', (req, res) => {
+    try {
+      const userId = getRequestUserId(req as AuthenticatedRequest);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const item = retryQueueItem(req.params.id, userId);
+      if (!item) {
+        res.status(404).json({ error: 'Failed queue item not found' });
+        return;
+      }
+      res.json({ retried: true, item });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

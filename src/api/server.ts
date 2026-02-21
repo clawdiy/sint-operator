@@ -103,6 +103,15 @@ export function shouldBypassApiAuth(path: string, authEnabled: boolean, method: 
   return false;
 }
 
+export function isValidWebhookSharedSecret(
+  expectedSecretRaw: string | undefined,
+  providedSecretRaw: string | undefined,
+): boolean {
+  const expectedSecret = expectedSecretRaw?.trim();
+  const providedSecret = providedSecretRaw?.trim();
+  return !!expectedSecret && !!providedSecret && expectedSecret === providedSecret;
+}
+
 // ─── Rate Limiters ───────────────────────────────────────────
 
 const generalLimiter = rateLimit({
@@ -306,9 +315,9 @@ function resolveWebhookUser(req: express.Request, payloadUserId?: string): { use
     return { userId: 'default', email: 'admin@localhost' };
   }
 
-  const expectedSecret = process.env.WEBHOOK_INGEST_SECRET?.trim();
-  const providedSecret = req.header('x-webhook-secret')?.trim();
-  if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
+  const expectedSecret = process.env.WEBHOOK_INGEST_SECRET;
+  const providedSecret = req.header('x-webhook-secret');
+  if (!isValidWebhookSharedSecret(expectedSecret, providedSecret)) {
     return null;
   }
 
@@ -523,6 +532,14 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       const results = await processQueue({
         limit: 50,
         resolveCredentials: (userId) => getSocialCredentials(userId),
+        onDeadLetter: async (item, result) => {
+          addNotification(item.userId, {
+            type: 'warning',
+            title: `Publish failed: ${item.request.platform}`,
+            message: result.error ?? 'Queued publish failed permanently after retries.',
+            runId: item.runId,
+          });
+        },
       });
       if (results.length > 0) {
         const success = results.filter(result => result.success).length;

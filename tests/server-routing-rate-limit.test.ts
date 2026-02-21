@@ -2,7 +2,7 @@ import { join } from 'path';
 import { mkdirSync, rmSync } from 'fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { __resetAuthForTests, initAuthDB, signup } from '../src/auth/auth-service.js';
-import { getPublishWorkerIntervalMs, getRateLimitKey, rewriteVersionedPath, shouldBypassApiAuth } from '../src/api/server.js';
+import { getPublishWorkerIntervalMs, getRateLimitKey, isValidWebhookSharedSecret, rewriteVersionedPath, shouldBypassApiAuth } from '../src/api/server.js';
 
 const TEST_ROOT = join(import.meta.dirname ?? '.', '__server_test_tmp__');
 
@@ -84,5 +84,13 @@ describe('server routing and rate-limit helpers', () => {
     expect(getPublishWorkerIntervalMs('100')).toBe(5_000);
     expect(getPublishWorkerIntervalMs('9999999')).toBe(300_000);
     expect(getPublishWorkerIntervalMs('45000')).toBe(45_000);
+  });
+
+  it('validates webhook shared secret correctly', () => {
+    expect(isValidWebhookSharedSecret('top-secret', 'top-secret')).toBe(true);
+    expect(isValidWebhookSharedSecret(' top-secret ', 'top-secret')).toBe(true);
+    expect(isValidWebhookSharedSecret('top-secret', 'bad-secret')).toBe(false);
+    expect(isValidWebhookSharedSecret(undefined, 'top-secret')).toBe(false);
+    expect(isValidWebhookSharedSecret('top-secret', undefined)).toBe(false);
   });
 });

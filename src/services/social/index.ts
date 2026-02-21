@@ -63,6 +63,8 @@ export interface ProcessQueueOptions {
   limit?: number;
   now?: Date;
   resolveCredentials?: (userId: string) => SocialCredentials | Promise<SocialCredentials>;
+  onPublished?: (item: PublishQueueItem, result: PublishResult) => void | Promise<void>;
+  onDeadLetter?: (item: PublishQueueItem, result: PublishResult) => void | Promise<void>;
 }
 
 let queueStore: PublishQueueStore | null = null;
@@ -138,6 +140,14 @@ function saveQueueItem(item: PublishQueueItem): void {
   } else {
     publishQueueMemory.push(item);
   }
+}
+
+function getQueueItemById(id: string): PublishQueueItem | undefined {
+  if (queueStore) {
+    const found = queueStore.get(id);
+    return found ? toQueueItem(found) : undefined;
+  }
+  return publishQueueMemory.find(item => item.id === id);
 }
 
 function getRetryDelayMs(attemptCount: number): number {
@@ -321,6 +331,9 @@ export async function processQueue(options: ProcessQueueOptions = {}): Promise<P
       item.nextAttemptAt = undefined;
       item.lastError = undefined;
       saveQueueItem(item);
+      if (options.onPublished) {
+        await options.onPublished(item, result);
+      }
       continue;
     }
 
@@ -331,11 +344,15 @@ export async function processQueue(options: ProcessQueueOptions = {}): Promise<P
     if (nextAttemptCount >= MAX_RETRY_ATTEMPTS) {
       item.status = 'failed';
       item.nextAttemptAt = undefined;
+      saveQueueItem(item);
+      if (options.onDeadLetter) {
+        await options.onDeadLetter(item, result);
+      }
     } else {
       item.status = 'pending';
       item.nextAttemptAt = new Date(now.getTime() + getRetryDelayMs(nextAttemptCount)).toISOString();
+      saveQueueItem(item);
     }
-    saveQueueItem(item);
   }
   return results;
 }
@@ -388,6 +405,22 @@ export function cancelQueueItem(id: string, userId?: string): boolean {
   item.status = 'cancelled';
   item.updatedAt = nowIso();
   return true;
+}
+
+export function retryQueueItem(id: string, userId?: string): PublishQueueItem | null {
+  const item = getQueueItemById(id);
+  if (!item) return null;
+  if (userId && item.userId !== userId) return null;
+  if (item.status !== 'failed') return null;
+
+  item.status = 'pending';
+  item.attemptCount = 0;
+  item.nextAttemptAt = undefined;
+  item.lastError = undefined;
+  item.result = undefined;
+  item.updatedAt = nowIso();
+  saveQueueItem(item);
+  return item;
 }
 
 // ─── Status ───────────────────────────────────────────────────

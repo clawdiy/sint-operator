@@ -10,6 +10,8 @@ import {
   publish,
   publishMulti,
   queuePublish,
+  processQueue,
+  retryQueueItem,
   getQueue,
   cancelQueueItem,
   getConfiguredPlatforms,
@@ -95,6 +97,48 @@ describe('Social Publishing Manager', () => {
     it('returns false when cancelling non-existent item', () => {
       const result = cancelQueueItem('nonexistent-id');
       expect(result).toBe(false);
+    });
+
+    it('moves failed items to dead-letter and allows retry', async () => {
+      const createdAt = new Date('2026-01-01T00:00:00.000Z');
+      const item = queuePublish(
+        { platform: 'twitter' as any, content: 'Will fail without credentials' },
+        'user-1',
+        'brand-1',
+      );
+
+      const deadLetters: string[] = [];
+      await processQueue({
+        userId: 'user-1',
+        now: new Date(createdAt),
+        onDeadLetter: async (failedItem) => {
+          deadLetters.push(failedItem.id);
+        },
+      });
+      await processQueue({
+        userId: 'user-1',
+        now: new Date(createdAt.getTime() + 61_000),
+        onDeadLetter: async (failedItem) => {
+          deadLetters.push(failedItem.id);
+        },
+      });
+      await processQueue({
+        userId: 'user-1',
+        now: new Date(createdAt.getTime() + (6 * 60_000) + 1_000),
+        onDeadLetter: async (failedItem) => {
+          deadLetters.push(failedItem.id);
+        },
+      });
+
+      const failedItems = getQueue({ userId: 'user-1', status: 'failed' });
+      expect(failedItems.length).toBe(1);
+      expect(failedItems[0].id).toBe(item.id);
+      expect(deadLetters).toEqual([item.id]);
+
+      const retried = retryQueueItem(item.id, 'user-1');
+      expect(retried).not.toBeNull();
+      expect(retried?.status).toBe('pending');
+      expect(retried?.attemptCount).toBe(0);
     });
   });
 
