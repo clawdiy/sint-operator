@@ -814,6 +814,61 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     res.json({ runId, template: template.id, status: 'queued' });
   });
 
+
+  // ─── Analytics ────────────────────────────────────────────
+  app.get('/api/analytics', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+    
+    const runs = runStore.list({ userId: brandUserId(user) ? user.userId : undefined, limit: 5000 });
+    const completed = runs.filter(r => r.status === 'completed');
+    const failed = runs.filter(r => r.status === 'failed');
+    
+    // Pipeline popularity
+    const pipelineCount: Record<string, number> = {};
+    for (const r of runs) {
+      pipelineCount[r.pipelineId] = (pipelineCount[r.pipelineId] || 0) + 1;
+    }
+    const topPipelines = Object.entries(pipelineCount)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id, count]) => ({ id, count }));
+    
+    // Success rate
+    const successRate = runs.length > 0 ? Math.round((completed.length / runs.length) * 100) : 0;
+    
+    // Average duration
+    const durations = completed
+      .filter(r => r.completedAt && r.startedAt)
+      .map(r => new Date(r.completedAt!).getTime() - new Date(r.startedAt).getTime());
+    const avgDuration = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+    
+    // Content volume (count deliverables)
+    let totalDeliverables = 0;
+    for (const r of completed) {
+      try {
+        const result = typeof r.result === 'string' ? JSON.parse(r.result || '{}') : (r.result || {});
+        const steps = result.steps || [];
+        for (const step of steps) {
+          const output = step.output || {};
+          if (output.deliverables) totalDeliverables += output.deliverables.length;
+          if (output.article) totalDeliverables += 1;
+          if (output.calendar) totalDeliverables += (output.calendar.length || 0);
+        }
+      } catch {}
+    }
+    
+    res.json({
+      totalRuns: runs.length,
+      completedRuns: completed.length,
+      failedRuns: failed.length,
+      successRate,
+      avgDurationMs: avgDuration,
+      totalDeliverables,
+      topPipelines,
+      runsToday: runs.filter(r => r.startedAt?.startsWith(new Date().toISOString().slice(0, 10))).length,
+    });
+  });
+
 app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
