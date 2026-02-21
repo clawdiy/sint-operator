@@ -351,6 +351,19 @@ export default function Settings() {
       <ConnectedAccounts />
 
       <SystemInfo />
+
+      <h2>Developer Tools</h2>
+      <div className="card" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+        <a href="/api/docs" target="_blank" rel="noopener" className="btn" style={{ textDecoration: 'none' }}>
+          📖 API Docs (Swagger)
+        </a>
+        <a href="/api/docs/openapi.yaml" target="_blank" rel="noopener" className="btn" style={{ textDecoration: 'none' }}>
+          📄 OpenAPI Spec
+        </a>
+        <a href="/health" target="_blank" rel="noopener" className="btn" style={{ textDecoration: 'none' }}>
+          💚 Health Check
+        </a>
+      </div>
     </div>
   );
 }
