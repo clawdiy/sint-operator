@@ -33,6 +33,7 @@ import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '.
 import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, createNotificationsRouter } from './notifications.js';
 import { createBrand, getBrand, listBrands, saveBrand } from '../core/brand/manager.js';
+import { initPublishQueueDB } from '../services/social/index.js';
 
 // ─── SSE Event Bus ───────────────────────────────────────────
 
@@ -298,6 +299,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   initAuthDB(dataDir);
   initApiKeyDB(dataDir);
+  initPublishQueueDB(dataDir);
 
   // ─── CORS ─────────────────────────────────────────────────
   app.use(cors({

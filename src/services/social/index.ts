@@ -5,6 +5,7 @@
  * Handles: Twitter/X, LinkedIn (more to come: Instagram, Telegram, Discord)
  */
 
+import { resolve } from 'path';
 import { postTweet, postThread, isTwitterConfigured, type TweetResult, type ThreadResult } from './twitter.js';
 import { postLinkedInUpdate, postLinkedInArticle, isLinkedInConfigured, verifyLinkedInToken, type LinkedInPostResult } from './linkedin.js';
 import {
@@ -13,43 +14,32 @@ import {
   verifyInstagramToken,
   type InstagramPostResult,
 } from './instagram.js';
-import type { Platform, Logger } from '../../core/types.js';
+import type { Logger } from '../../core/types.js';
+import type {
+  PublishQueueItem,
+  PublishQueueStatus,
+  PublishRequest,
+  PublishResult,
+} from './types.js';
+import {
+  __resetPublishStoreForTests,
+  getQueueItem,
+  initPublishStore,
+  insertQueueItem,
+  listQueueItems,
+  updateQueueItem,
+} from './store.js';
 
-// ─── Types ────────────────────────────────────────────────────
-
-export interface PublishRequest {
-  platform: Platform;
-  content: string;
-  hashtags?: string[];
-  media?: string[];
-  articleUrl?: string;
-  articleTitle?: string;
-  articleDescription?: string;
-  isThread?: boolean;  // For Twitter threads
+function ensurePublishStoreInitialized(): void {
+  initPublishStore(resolve(process.env.SINT_DATA_DIR ?? './data'));
 }
 
-export interface PublishResult {
-  platform: Platform;
-  success: boolean;
-  postId?: string;
-  postUrl?: string;
-  error?: string;
+/**
+ * Initialize publish queue DB (called at API server startup).
+ */
+export function initPublishQueueDB(dataDir: string): void {
+  initPublishStore(dataDir);
 }
-
-export interface PublishQueueItem {
-  id: string;
-  request: PublishRequest;
-  brandId: string;
-  runId?: string;
-  scheduledAt?: string;
-  status: 'pending' | 'published' | 'failed' | 'cancelled';
-  result?: PublishResult;
-  createdAt: string;
-}
-
-// ─── In-memory queue (swap for DB in production) ──────────────
-
-const publishQueue: PublishQueueItem[] = [];
 
 // ─── Publishing ───────────────────────────────────────────────
 
@@ -184,26 +174,30 @@ export function queuePublish(
   brandId: string,
   runId?: string,
   scheduledAt?: string,
+  options: { requiresApproval?: boolean } = {},
 ): PublishQueueItem {
-  const item: PublishQueueItem = {
+  ensurePublishStoreInitialized();
+  const requiresApproval = options.requiresApproval === true;
+  const status: PublishQueueStatus = requiresApproval ? 'pending_approval' : 'pending';
+
+  return insertQueueItem({
     id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     request,
     brandId,
     runId,
     scheduledAt,
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-  };
-  publishQueue.push(item);
-  return item;
+    status,
+    requiresApproval,
+  });
 }
 
 /**
  * Process pending items in the queue.
  */
 export async function processQueue(logger?: Logger): Promise<PublishResult[]> {
+  ensurePublishStoreInitialized();
   const now = new Date();
-  const pending = publishQueue.filter(item => {
+  const pending = listQueueItems({ status: 'pending' }).filter(item => {
     if (item.status !== 'pending') return false;
     if (item.scheduledAt && new Date(item.scheduledAt) > now) return false;
     return true;
@@ -213,8 +207,8 @@ export async function processQueue(logger?: Logger): Promise<PublishResult[]> {
   for (const item of pending) {
     try {
       const result = await publish(item.request, logger);
-      item.result = result;
-      item.status = result.success ? 'published' : 'failed';
+      const nextStatus: PublishQueueStatus = result.success ? 'published' : 'failed';
+      updateQueueItem(item.id, { status: nextStatus, result });
       results.push(result);
     } catch (err) {
       const failedResult: PublishResult = {
@@ -222,8 +216,7 @@ export async function processQueue(logger?: Logger): Promise<PublishResult[]> {
         success: false,
         error: String(err),
       };
-      item.result = failedResult;
-      item.status = 'failed';
+      updateQueueItem(item.id, { status: 'failed', result: failedResult });
       logger?.error('Queued publish failed with exception', {
         queueItemId: item.id,
         platform: item.request.platform,
@@ -239,27 +232,80 @@ export async function processQueue(logger?: Logger): Promise<PublishResult[]> {
  * Get queue items.
  */
 export function getQueue(filters?: { status?: string; brandId?: string }): PublishQueueItem[] {
-  let items = [...publishQueue];
-  if (filters?.status) items = items.filter(i => i.status === filters.status);
-  if (filters?.brandId) items = items.filter(i => i.brandId === filters.brandId);
-  return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  ensurePublishStoreInitialized();
+  return listQueueItems(filters);
 }
 
 /**
  * Cancel a queued item.
  */
 export function cancelQueueItem(id: string): boolean {
-  const item = publishQueue.find(i => i.id === id);
-  if (!item || item.status !== 'pending') return false;
-  item.status = 'cancelled';
+  ensurePublishStoreInitialized();
+  const item = getQueueItem(id);
+  if (!item || (item.status !== 'pending' && item.status !== 'pending_approval')) return false;
+  updateQueueItem(id, { status: 'cancelled' });
   return true;
+}
+
+/**
+ * Approve a queued item that requires approval.
+ */
+export function approveQueueItem(id: string, approvedBy: string = 'system'): PublishQueueItem | null {
+  ensurePublishStoreInitialized();
+  const item = getQueueItem(id);
+  if (!item || item.status !== 'pending_approval') return null;
+  return updateQueueItem(id, {
+    status: 'pending',
+    approvedBy,
+    approvedAt: new Date().toISOString(),
+    rejectionReason: null,
+  });
+}
+
+/**
+ * Reject a queued item that requires approval.
+ */
+export function rejectQueueItem(id: string, reason?: string): PublishQueueItem | null {
+  ensurePublishStoreInitialized();
+  const item = getQueueItem(id);
+  if (!item || item.status !== 'pending_approval') return null;
+  return updateQueueItem(id, {
+    status: 'cancelled',
+    rejectionReason: reason ?? 'Rejected during approval review',
+  });
+}
+
+/**
+ * Get queue item by id.
+ */
+export function getQueueItemById(id: string): PublishQueueItem | null {
+  ensurePublishStoreInitialized();
+  return getQueueItem(id);
+}
+
+/**
+ * Get queue summary counters by status.
+ */
+export function getQueueSummary(brandId?: string): Record<PublishQueueStatus, number> {
+  ensurePublishStoreInitialized();
+  const summary: Record<PublishQueueStatus, number> = {
+    pending: 0,
+    pending_approval: 0,
+    published: 0,
+    failed: 0,
+    cancelled: 0,
+  };
+  for (const item of listQueueItems(brandId ? { brandId } : undefined)) {
+    summary[item.status] += 1;
+  }
+  return summary;
 }
 
 /**
  * Test hook for clearing in-memory queue state.
  */
 export function __resetPublishQueueForTests(): void {
-  publishQueue.splice(0, publishQueue.length);
+  __resetPublishStoreForTests();
 }
 
 // ─── Status ───────────────────────────────────────────────────
@@ -305,3 +351,4 @@ export async function verifyAllTokens(logger?: Logger): Promise<Record<string, b
 // Re-export
 export { isTwitterConfigured, isLinkedInConfigured, isInstagramConfigured };
 export type { TweetResult, ThreadResult, LinkedInPostResult, InstagramPostResult };
+export type { PublishQueueItem, PublishQueueStatus, PublishRequest, PublishResult };

@@ -1,9 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync, mkdirSync, rmSync } from 'fs';
+import { join } from 'path';
 import type { Logger } from '../src/core/types.js';
 import {
+  approveQueueItem,
   __resetPublishQueueForTests,
   getConfiguredPlatforms,
+  getQueueItemById,
+  getQueueSummary,
   getQueue,
+  initPublishQueueDB,
   processQueue,
   publish,
   queuePublish,
@@ -17,6 +23,7 @@ let linkedinTokenValid = false;
 let instagramTokenValid = false;
 let instagramThrows = false;
 let instagramPostResult: { id: string; url: string } | null = null;
+const TEST_ROOT = join(import.meta.dirname ?? '.', '__social_publish_test_tmp__');
 
 vi.mock('../src/services/social/twitter.js', () => ({
   isTwitterConfigured: () => twitterConfigured,
@@ -54,6 +61,12 @@ const logger: Logger = {
 
 describe('social publishing manager', () => {
   beforeEach(() => {
+    if (existsSync(TEST_ROOT)) {
+      rmSync(TEST_ROOT, { recursive: true, force: true });
+    }
+    mkdirSync(TEST_ROOT, { recursive: true });
+    initPublishQueueDB(TEST_ROOT);
+
     twitterConfigured = false;
     linkedinConfigured = false;
     instagramConfigured = false;
@@ -61,7 +74,13 @@ describe('social publishing manager', () => {
     instagramTokenValid = false;
     instagramThrows = false;
     instagramPostResult = null;
+  });
+
+  afterEach(() => {
     __resetPublishQueueForTests();
+    if (existsSync(TEST_ROOT)) {
+      rmSync(TEST_ROOT, { recursive: true, force: true });
+    }
   });
 
   it('publishes an Instagram post when configured with media', async () => {
@@ -141,5 +160,56 @@ describe('social publishing manager', () => {
     expect(results[0].success).toBe(false);
     expect(results[0].error).toContain('instagram exploded');
     expect(queue[0].status).toBe('failed');
+  });
+
+  it('holds pending-approval items until approved', async () => {
+    twitterConfigured = true;
+    const created = queuePublish(
+      {
+        platform: 'twitter',
+        content: 'Queue me after approval',
+      },
+      'brand-2',
+      'run-2',
+      undefined,
+      { requiresApproval: true },
+    );
+
+    const beforeProcess = await processQueue(logger);
+    expect(beforeProcess).toHaveLength(0);
+    expect(getQueueItemById(created.id)?.status).toBe('pending_approval');
+
+    const approved = approveQueueItem(created.id, 'qa-reviewer');
+    expect(approved?.status).toBe('pending');
+    expect(approved?.approvedBy).toBe('qa-reviewer');
+
+    const afterProcess = await processQueue(logger);
+    expect(afterProcess).toHaveLength(1);
+    expect(afterProcess[0].success).toBe(true);
+    expect(getQueueItemById(created.id)?.status).toBe('published');
+
+    const summary = getQueueSummary('brand-2');
+    expect(summary.published).toBe(1);
+    expect(summary.pending_approval).toBe(0);
+  });
+
+  it('persists queue items across service re-initialization', () => {
+    const created = queuePublish(
+      {
+        platform: 'linkedin',
+        content: 'Persist me',
+      },
+      'brand-3',
+      'run-3',
+    );
+
+    // Close current DB connection and reopen from same data path.
+    __resetPublishQueueForTests();
+    initPublishQueueDB(TEST_ROOT);
+
+    const loaded = getQueueItemById(created.id);
+    expect(loaded?.id).toBe(created.id);
+    expect(loaded?.brandId).toBe('brand-3');
+    expect(loaded?.status).toBe('pending');
   });
 });
