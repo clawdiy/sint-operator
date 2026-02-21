@@ -39,6 +39,8 @@ import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, createNotificationsRouter } from './notifications.js';
 import { createBrand, getBrand, listBrands, saveBrand } from '../core/brand/manager.js';
 import type { LinkedInCredentials, TwitterCredentials } from '../services/social/types.js';
+import { validateBody } from './validation.js';
+import { logger } from './logger.js';
 
 // ─── SSE Event Bus ───────────────────────────────────────────
 
@@ -560,10 +562,10 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       if (results.length > 0) {
         const success = results.filter(result => result.success).length;
         const failed = results.length - success;
-        console.log(`[publish-worker] processed=${results.length} success=${success} failed=${failed}`);
+        logger.info('Publish worker processed', { processed: results.length, success, failed });
       }
     } catch (error) {
-      console.error('[publish-worker] processing failed', error);
+      logger.error('Publish worker processing failed', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       publishWorkerRunning = false;
     }
@@ -592,6 +594,18 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   }));
 
   app.use(express.json({ limit: '50mb' }));
+
+  // ─── Request Timing ─────────────────────────────────────
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      if (duration > 5000) {
+        logger.warn('Slow request', { method: req.method, path: req.path, duration, status: res.statusCode });
+      }
+    });
+    next();
+  });
   
   // ─── Integrations ────────────────────────────────────────
   app.use("/mcp", createMCPRoutes(orchestrator));
@@ -636,7 +650,84 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // ─── Health ─────────────────────────────────────────────
 
-  app.get('/health', (_req, res) => {
+  
+  // Export all run results as JSON
+  app.get('/api/export', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+    
+    const format = (req.query.format as string) || 'json';
+    const runs = runStore.list({ userId: brandUserId(user) ? user.userId : undefined, limit: 1000 });
+    const completedRuns = runs.filter(r => r.status === 'completed');
+    
+    if (format === 'markdown') {
+      let md = '# SINT Marketing Operator — Content Export\n\n';
+      md += `Generated: ${new Date().toISOString()}\n`;
+      md += `Total runs: ${completedRuns.length}\n\n---\n\n`;
+      
+      for (const run of completedRuns) {
+        md += `## ${run.pipelineId} — ${new Date(run.startedAt).toLocaleString()}\n\n`;
+        
+        const result = typeof run.result === 'string' ? JSON.parse(run.result || '{}') : (run.result || {});
+        const steps = result.steps || [];
+        
+        for (const step of steps) {
+          const output = step.output || {};
+          
+          // Extract deliverables
+          if (output.deliverables && Array.isArray(output.deliverables)) {
+            for (const d of output.deliverables) {
+              md += `### ${(d.platform || 'unknown').toUpperCase()}\n\n`;
+              md += `${d.content || ''}\n\n`;
+              if (d.hashtags?.length) md += `Tags: ${d.hashtags.join(' ')}\n\n`;
+              md += `---\n\n`;
+            }
+          }
+          
+          // Extract article
+          if (output.article) {
+            const a = output.article;
+            md += `### ${a.title || 'Article'}\n\n`;
+            if (a.metaDescription) md += `*${a.metaDescription}*\n\n`;
+            md += `${a.content || ''}\n\n---\n\n`;
+          }
+          
+          // Extract calendar
+          if (output.calendar && Array.isArray(output.calendar)) {
+            md += `### Content Calendar\n\n`;
+            for (const day of output.calendar) {
+              md += `#### Day ${day.day || '?'}${day.date ? ' — ' + day.date : ''}\n\n`;
+              for (const post of (day.posts || [])) {
+                md += `- **${post.platform}** (${post.time || 'TBD'}): ${(post.content || '').slice(0, 100)}...\n`;
+              }
+              md += '\n';
+            }
+            md += '---\n\n';
+          }
+        }
+      }
+      
+      res.setHeader('Content-Type', 'text/markdown');
+      res.setHeader('Content-Disposition', 'attachment; filename="sint-export.md"');
+      res.send(md);
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="sint-export.json"');
+      res.json({
+        exportedAt: new Date().toISOString(),
+        totalRuns: completedRuns.length,
+        runs: completedRuns.map(r => ({
+          id: r.id,
+          pipeline: r.pipelineId,
+          brand: r.brandId,
+          startedAt: r.startedAt,
+          result: typeof r.result === 'string' ? JSON.parse(r.result || '{}') : r.result,
+        })),
+      });
+    }
+  });
+
+app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
       version: process.env.npm_package_version || '0.5.0',
@@ -961,7 +1052,11 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // ─── Quick Actions (async) ──────────────────────────────
 
-  app.post('/api/repurpose', pipelineLimiter, async (req, res) => {
+  app.post('/api/repurpose', pipelineLimiter, validateBody({
+    content: { type: 'string', required: true, maxLength: 50000 },
+    brandId: { type: 'string', required: true },
+    platforms: { type: 'array', required: true },
+  }), async (req, res) => {
     try {
       const user = getRequestUser(req, res);
       if (!user) return;
@@ -991,7 +1086,10 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     }
   });
 
-  app.post('/api/blog', pipelineLimiter, async (req, res) => {
+  app.post('/api/blog', pipelineLimiter, validateBody({
+    topic: { type: 'string', required: true, maxLength: 1000 },
+    brandId: { type: 'string', required: true },
+  }), async (req, res) => {
     try {
       const user = getRequestUser(req, res);
       if (!user) return;
@@ -1021,7 +1119,10 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     }
   });
 
-  app.post('/api/calendar', pipelineLimiter, async (req, res) => {
+  app.post('/api/calendar', pipelineLimiter, validateBody({
+    brandId: { type: 'string', required: true },
+    days: { type: 'number', required: true },
+  }), async (req, res) => {
     try {
       const user = getRequestUser(req, res);
       if (!user) return;
@@ -1408,23 +1509,8 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   // ─── Start ──────────────────────────────────────────────
 
   const server = app.listen(port, () => {
-    console.log(`\n🚀 SINT Marketing Operator API — http://localhost:${port}`);
-    console.log(`   Health:    GET  /health`);
-    console.log(`   Test LLM:  POST /api/test-llm`);
-    console.log(`   Auth:      POST /api/auth/signup | /api/auth/login`);
-    console.log(`   Skills:    GET  /api/skills`);
-    console.log(`   Usage:     GET  /api/usage`);
-    console.log(`   Repurpose: POST /api/repurpose`);
-    console.log(`   Blog:      POST /api/blog`);
-    console.log(`   Calendar:  POST /api/calendar`);
-    console.log(`   Run Poll:  GET  /api/runs/:id`);
-    console.log(`   Run Stream: GET  /api/runs/:id/stream (SSE)`);
-    console.log(`   Run Cancel: POST /api/runs/:id/cancel\n`);
-    if (publishWorkerEnabled) {
-      console.log(`   Publish Worker: enabled (${publishWorkerIntervalMs}ms interval)`);
-    } else {
-      console.log('   Publish Worker: disabled');
-    }
+    logger.info('SINT Marketing Operator API started', { port, url: `http://localhost:${port}` });
+    logger.info('Routes registered', { publishWorker: publishWorkerEnabled, publishWorkerIntervalMs });
   });
 
   server.on('close', () => {

@@ -19,6 +19,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { Orchestrator } from './orchestrator/index.js';
 import { createServer } from './api/server.js';
 import type { ModelConfig } from './core/types.js';
+import { logger } from './api/logger.js';
 
 const DATA_DIR = resolve(process.env.SINT_DATA_DIR ?? './data');
 const CONFIG_DIR = resolve(process.env.SINT_CONFIG_DIR ?? './config');
@@ -78,14 +79,18 @@ const { server } = createServer(orchestrator, PORT, {
 });
 
 // Graceful shutdown
-const shutdown = () => {
-  console.log('\n🛑 Shutting down...');
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
   orchestrator.shutdown();
   server.close(() => {
-    console.log('✅ Shutdown complete');
+    logger.info('Server closed');
     process.exit(0);
   });
-};
+  setTimeout(() => process.exit(1), 10000);
+});
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => {
+  logger.info('SIGINT received');
+  orchestrator.shutdown();
+  server.close(() => process.exit(0));
+});
