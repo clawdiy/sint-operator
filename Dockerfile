@@ -13,7 +13,8 @@ COPY . .
 RUN npx tsc || (echo "⚠️ TSC failed, trying with skipLibCheck" && npx tsc --skipLibCheck)
 
 # Build UI (Vite)
-RUN npm run ui:build 2>&1 || echo "⚠️ Vite build failed, using fallback"
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+RUN CI=true npm run ui:build 2>&1 || echo "⚠️ Vite build failed, using fallback"
 
 # Ensure ui-static exists
 RUN mkdir -p dist/ui-static && \
