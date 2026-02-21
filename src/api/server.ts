@@ -26,15 +26,18 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { nanoid } from 'nanoid';
 import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
+import { initPublishQueueStore } from '../services/social/index.js';
 import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
 import { notifyPipelineComplete, isTelegramConfigured } from '../skills/notifier/telegram.js';
 import { createAuthRouter } from '../auth/auth-routes.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/auth-middleware.js';
 import { getUser, initAuthDB, verifyToken } from '../auth/auth-service.js';
 import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '../auth/api-key-service.js';
+import { getSocialStatus, initSocialAccountDB, storeSocialCredentials } from '../auth/social-account-service.js';
 import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, createNotificationsRouter } from './notifications.js';
 import { createBrand, getBrand, listBrands, saveBrand } from '../core/brand/manager.js';
+import type { LinkedInCredentials, TwitterCredentials } from '../services/social/types.js';
 
 // ─── SSE Event Bus ───────────────────────────────────────────
 
@@ -167,6 +170,80 @@ function parseStringQuery(raw: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function parseNumber(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+type UsageSummaryResponse = {
+  period: string;
+  totalRuns: number;
+  totalTokens: number;
+  totalCostUnits: number;
+  byModel: Record<string, { tokens: number; costUnits: number; runs: number }>;
+  byPipeline: Record<string, { runs: number; costUnits: number }>;
+  byBrand: Record<string, { runs: number; costUnits: number }>;
+};
+
+export function summarizeUsageFromRuns(runs: AsyncRun[], periodDays: number): UsageSummaryResponse {
+  const safeDays = Number.isFinite(periodDays) && periodDays > 0 ? periodDays : 30;
+  const cutoffTs = Date.now() - (safeDays * 24 * 60 * 60 * 1000);
+
+  const summary: UsageSummaryResponse = {
+    period: `${safeDays}d`,
+    totalRuns: 0,
+    totalTokens: 0,
+    totalCostUnits: 0,
+    byModel: {},
+    byPipeline: {},
+    byBrand: {},
+  };
+
+  for (const run of runs) {
+    const startedTs = Date.parse(run.startedAt);
+    if (Number.isFinite(startedTs) && startedTs < cutoffTs) continue;
+
+    summary.totalRuns += 1;
+
+    const nested = isObjectRecord(run.result) ? run.result : null;
+    const metering = isObjectRecord(nested?.metering) ? nested.metering : null;
+
+    const runTokens = parseNumber(metering?.totalTokens);
+    const runCost = parseNumber(metering?.totalCostUnits);
+    summary.totalTokens += runTokens;
+    summary.totalCostUnits += runCost;
+
+    if (!summary.byPipeline[run.pipelineId]) {
+      summary.byPipeline[run.pipelineId] = { runs: 0, costUnits: 0 };
+    }
+    summary.byPipeline[run.pipelineId].runs += 1;
+    summary.byPipeline[run.pipelineId].costUnits += runCost;
+
+    if (!summary.byBrand[run.brandId]) {
+      summary.byBrand[run.brandId] = { runs: 0, costUnits: 0 };
+    }
+    summary.byBrand[run.brandId].runs += 1;
+    summary.byBrand[run.brandId].costUnits += runCost;
+
+    const modelBreakdown = isObjectRecord(metering?.modelBreakdown) ? metering.modelBreakdown : null;
+    if (!modelBreakdown) continue;
+
+    for (const [model, row] of Object.entries(modelBreakdown)) {
+      if (!isObjectRecord(row)) continue;
+      const tokens = parseNumber(row.tokens);
+      const costUnits = parseNumber(row.costUnits);
+      if (!summary.byModel[model]) {
+        summary.byModel[model] = { tokens: 0, costUnits: 0, runs: 0 };
+      }
+      summary.byModel[model].tokens += tokens;
+      summary.byModel[model].costUnits += costUnits;
+      summary.byModel[model].runs += 1;
+    }
+  }
+
+  return summary;
+}
+
 
 function toAsyncRunResponse(run: AsyncRun): Record<string, unknown> {
   const nested = isObjectRecord(run.result) ? run.result : null;
@@ -256,6 +333,19 @@ function storeWebhookEvent(event: IngestedWebhookEvent): void {
 
 const apiKeySchema = z.object({
   apiKey: z.string().trim().min(1),
+});
+
+const twitterCredentialsSchema = z.object({
+  apiKey: z.string().trim().min(1),
+  apiSecret: z.string().trim().min(1),
+  accessToken: z.string().trim().min(1),
+  accessSecret: z.string().trim().min(1),
+  handle: z.string().trim().min(1).optional(),
+});
+
+const linkedInCredentialsSchema = z.object({
+  accessToken: z.string().trim().min(1),
+  personUrn: z.string().trim().min(1),
 });
 
 const webhookPayloadSchema = z.object({
@@ -378,15 +468,17 @@ export interface CreateServerOptions {
 }
 
 export function createServer(orchestrator: Orchestrator, port: number = 18789, options: CreateServerOptions = {}) {
-  runStore = new RunStore(join(process.env.SINT_DATA_DIR ?? './data', 'runs.db'));
-
-  const app = express();
   const dataDir = resolve(options.dataDir ?? process.env.SINT_DATA_DIR ?? './data');
   const configDir = resolve(options.configDir ?? process.env.SINT_CONFIG_DIR ?? './config');
   const brandsDir = join(configDir, 'brands');
+  runStore = new RunStore(join(dataDir, 'runs.db'));
+
+  const app = express();
 
   initAuthDB(dataDir);
   initApiKeyDB(dataDir);
+  initSocialAccountDB(dataDir);
+  initPublishQueueStore(dataDir);
 
   app.use((req, _res, next) => {
     const rewritten = rewriteVersionedPath(req.url);
@@ -419,7 +511,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   app.use('/api/', generalLimiter);
 
   // File upload — use SINT_DATA_DIR for uploads
-  const uploadDir = join(process.env.SINT_DATA_DIR ?? './data', 'uploads');
+  const uploadDir = join(dataDir, 'uploads');
   mkdirSync(uploadDir, { recursive: true });
   const upload = multer({ dest: uploadDir, limits: { fileSize: 100 * 1024 * 1024 } });
 
@@ -654,36 +746,73 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   // ─── Social Account Connection ──────────────────────────
 
   app.post('/api/settings/social/:platform', (req, res) => {
-    const { platform } = req.params;
-    const credentials = req.body;
+    try {
+      const user = getRequestUser(req, res);
+      if (!user) return;
 
-    if (platform === 'twitter') {
-      process.env.TWITTER_API_KEY = credentials.apiKey;
-      process.env.TWITTER_API_SECRET = credentials.apiSecret;
-      process.env.TWITTER_ACCESS_TOKEN = credentials.accessToken;
-      process.env.TWITTER_ACCESS_SECRET = credentials.accessSecret;
-      if (credentials.handle) process.env.TWITTER_HANDLE = credentials.handle;
-    } else if (platform === 'linkedin') {
-      process.env.LINKEDIN_ACCESS_TOKEN = credentials.accessToken;
-      process.env.LINKEDIN_PERSON_URN = credentials.personUrn;
-    } else {
+      const { platform } = req.params;
+      if (platform === 'twitter') {
+        const payload = twitterCredentialsSchema.parse(req.body ?? {});
+        const credentials: TwitterCredentials = {
+          apiKey: payload.apiKey,
+          apiSecret: payload.apiSecret,
+          accessToken: payload.accessToken,
+          accessSecret: payload.accessSecret,
+          ...(payload.handle ? { handle: payload.handle } : {}),
+        };
+        storeSocialCredentials(user.userId, 'twitter', credentials);
+        res.json({ ok: true, platform });
+        return;
+      }
+
+      if (platform === 'linkedin') {
+        const payload = linkedInCredentialsSchema.parse(req.body ?? {});
+        const credentials: LinkedInCredentials = {
+          accessToken: payload.accessToken,
+          personUrn: payload.personUrn,
+        };
+        storeSocialCredentials(user.userId, 'linkedin', credentials);
+        res.json({ ok: true, platform });
+        return;
+      }
+
       res.status(400).json({ error: `Unsupported platform: ${platform}` });
-      return;
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: error.issues[0]?.message ?? 'Invalid payload' });
+        return;
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
-
-    res.json({ ok: true, platform });
   });
 
-  app.get('/api/settings/social/status', (_req, res) => {
-    const twitter = {
-      configured: !!(process.env.TWITTER_API_KEY && process.env.TWITTER_ACCESS_TOKEN),
-      handle: process.env.TWITTER_HANDLE || '@connected',
-    };
-    const linkedin = {
-      configured: !!(process.env.LINKEDIN_ACCESS_TOKEN),
-      personUrn: process.env.LINKEDIN_PERSON_URN || '',
-    };
-    res.json({ twitter, linkedin });
+  app.get('/api/settings/social/status', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
+    const status = getSocialStatus(user.userId);
+
+    // Backward compatibility for local single-user mode using env vars.
+    if (process.env.AUTH_ENABLED !== 'true') {
+      status.twitter.configured = status.twitter.configured || !!(
+        process.env.TWITTER_API_KEY
+        && process.env.TWITTER_API_SECRET
+        && process.env.TWITTER_ACCESS_TOKEN
+        && process.env.TWITTER_ACCESS_SECRET
+      );
+      if (!status.twitter.handle && process.env.TWITTER_HANDLE) {
+        status.twitter.handle = process.env.TWITTER_HANDLE;
+      }
+      status.linkedin.configured = status.linkedin.configured || !!(
+        process.env.LINKEDIN_ACCESS_TOKEN
+        && process.env.LINKEDIN_PERSON_URN
+      );
+      if (!status.linkedin.personUrn && process.env.LINKEDIN_PERSON_URN) {
+        status.linkedin.personUrn = process.env.LINKEDIN_PERSON_URN;
+      }
+    }
+
+    res.json(status);
   });
 
   // ─── Pipelines ──────────────────────────────────────────
@@ -1026,12 +1155,27 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   // ─── Metering ───────────────────────────────────────────
 
   app.get('/api/usage', (req, res) => {
-    const days = parseInt(req.query.days as string) || 30;
-    res.json(orchestrator.getUsageSummary(days));
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
+    const daysRaw = Number.parseInt(String(req.query.days ?? ''), 10);
+    const days = Number.isFinite(daysRaw) && daysRaw > 0 ? daysRaw : 30;
+    const runs = runStore.list({ userId: user.userId, limit: 5000 });
+    res.json(summarizeUsageFromRuns(runs, days));
   });
 
-  app.get('/api/usage/current', (_req, res) => {
-    res.json(orchestrator.getModelUsage());
+  app.get('/api/usage/current', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
+    const summary = summarizeUsageFromRuns(runStore.list({ userId: user.userId, limit: 500 }), 1);
+    res.json({
+      totalRuns: summary.totalRuns,
+      totalTokens: summary.totalTokens,
+      totalCostUnits: summary.totalCostUnits,
+      byModel: summary.byModel,
+      period: summary.period,
+    });
   });
 
   app.post('/api/usage/limits', (req, res) => {

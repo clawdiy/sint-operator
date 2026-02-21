@@ -22,6 +22,8 @@ import {
   verifyAllTokens,
   type PublishRequest,
 } from '../services/social/index.js';
+import type { AuthenticatedRequest } from '../auth/auth-middleware.js';
+import { getSocialCredentials } from '../auth/social-account-service.js';
 
 const logger = {
   info: (msg: string, meta?: Record<string, unknown>) => console.log(`[publish] ${msg}`, meta ?? ''),
@@ -33,9 +35,20 @@ const logger = {
 export function createPublishRoutes(): Router {
   const router = Router();
 
+  function getRequestUserId(req: AuthenticatedRequest): string | null {
+    if (process.env.AUTH_ENABLED !== 'true') return 'default';
+    return req.user?.userId ?? null;
+  }
+
   // Publish immediately to a single platform
   router.post('/', async (req, res) => {
     try {
+      const userId = getRequestUserId(req as AuthenticatedRequest);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
       const { platform, content, hashtags, media, articleUrl, articleTitle, articleDescription, isThread } = req.body;
       if (!platform || !content) {
         return res.status(400).json({ error: 'platform and content are required' });
@@ -45,7 +58,10 @@ export function createPublishRoutes(): Router {
         platform, content, hashtags, media,
         articleUrl, articleTitle, articleDescription, isThread,
       };
-      const result = await publish(request, logger);
+      const result = await publish(request, logger, {
+        userId,
+        credentials: getSocialCredentials(userId),
+      });
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -55,12 +71,21 @@ export function createPublishRoutes(): Router {
   // Publish to multiple platforms
   router.post('/multi', async (req, res) => {
     try {
+      const userId = getRequestUserId(req as AuthenticatedRequest);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
       const { requests } = req.body;
       if (!Array.isArray(requests) || requests.length === 0) {
         return res.status(400).json({ error: 'requests array is required' });
       }
 
-      const results = await publishMulti(requests, logger);
+      const results = await publishMulti(requests, logger, {
+        userId,
+        credentials: getSocialCredentials(userId),
+      });
       res.json({ results, summary: { total: results.length, success: results.filter(r => r.success).length } });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -70,12 +95,18 @@ export function createPublishRoutes(): Router {
   // Add to queue
   router.post('/queue', (req, res) => {
     try {
+      const userId = getRequestUserId(req as AuthenticatedRequest);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
       const { request, brandId, runId, scheduledAt } = req.body;
       if (!request?.platform || !request?.content || !brandId) {
         return res.status(400).json({ error: 'request (with platform, content) and brandId are required' });
       }
 
-      const item = queuePublish(request, brandId, runId, scheduledAt);
+      const item = queuePublish(request, userId, brandId, runId, scheduledAt);
       res.status(201).json(item);
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -85,7 +116,17 @@ export function createPublishRoutes(): Router {
   // Process queue
   router.post('/process', async (req, res) => {
     try {
-      const results = await processQueue(logger);
+      const userId = getRequestUserId(req as AuthenticatedRequest);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const results = await processQueue({
+        logger,
+        userId,
+        resolveCredentials: id => getSocialCredentials(id),
+      });
       res.json({ processed: results.length, results });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -95,8 +136,15 @@ export function createPublishRoutes(): Router {
   // Get queue
   router.get('/queue', (req, res) => {
     try {
+      const userId = getRequestUserId(req as AuthenticatedRequest);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
       const { status, brandId } = req.query;
       const items = getQueue({
+        userId,
         status: status as string | undefined,
         brandId: brandId as string | undefined,
       });
@@ -109,7 +157,13 @@ export function createPublishRoutes(): Router {
   // Cancel queue item
   router.delete('/queue/:id', (req, res) => {
     try {
-      const success = cancelQueueItem(req.params.id);
+      const userId = getRequestUserId(req as AuthenticatedRequest);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const success = cancelQueueItem(req.params.id, userId);
       if (success) {
         res.json({ cancelled: true });
       } else {
@@ -122,9 +176,16 @@ export function createPublishRoutes(): Router {
 
   // Platform status
   router.get('/status', async (req, res) => {
-    const configured = getConfiguredPlatforms();
+    const userId = getRequestUserId(req as AuthenticatedRequest);
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const credentials = getSocialCredentials(userId);
+    const configured = getConfiguredPlatforms(credentials);
     const verify = req.query.verify === 'true';
-    const verified = verify ? await verifyAllTokens(logger) : undefined;
+    const verified = verify ? await verifyAllTokens(logger, credentials) : undefined;
     res.json({ platforms: configured, verified });
   });
 

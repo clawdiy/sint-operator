@@ -4,8 +4,9 @@
  * Tests the unified publish interface, queue management, and platform detection.
  */
 
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  __resetSocialPublishingForTests,
   publish,
   publishMulti,
   queuePublish,
@@ -15,6 +16,10 @@ import {
 } from '../src/services/social/index.js';
 
 describe('Social Publishing Manager', () => {
+  beforeEach(() => {
+    __resetSocialPublishingForTests();
+  });
+
   describe('Platform Status', () => {
     it('returns configured platforms map', () => {
       const status = getConfiguredPlatforms();
@@ -27,8 +32,8 @@ describe('Social Publishing Manager', () => {
     it('shows platforms as not configured without env vars', () => {
       const status = getConfiguredPlatforms();
       // Without env vars, platforms should not be configured
-      expect(status.twitter).toBe(false);
-      expect(status.linkedin).toBe(false);
+      expect(status.twitter.configured).toBe(false);
+      expect(status.linkedin.configured).toBe(false);
     });
   });
 
@@ -36,6 +41,7 @@ describe('Social Publishing Manager', () => {
     it('adds items to the publish queue', () => {
       const item = queuePublish(
         { platform: 'twitter' as any, content: 'Test tweet from SINT' },
+        'user-1',
         'sint-brand',
       );
       expect(item).toBeDefined();
@@ -47,7 +53,22 @@ describe('Social Publishing Manager', () => {
     it('lists queue items', () => {
       const items = getQueue();
       expect(Array.isArray(items)).toBe(true);
-      expect(items.length).toBeGreaterThan(0);
+      expect(items.length).toBe(0);
+
+      queuePublish(
+        { platform: 'twitter' as any, content: 'Scoped tweet' },
+        'user-1',
+        'brand-1',
+      );
+      queuePublish(
+        { platform: 'linkedin' as any, content: 'Other user post' },
+        'user-2',
+        'brand-2',
+      );
+
+      const user1Items = getQueue({ userId: 'user-1' });
+      expect(user1Items.length).toBe(1);
+      expect(user1Items[0].userId).toBe('user-1');
     });
 
     it('filters queue by status', () => {
@@ -61,6 +82,7 @@ describe('Social Publishing Manager', () => {
     it('cancels a queue item', () => {
       const item = queuePublish(
         { platform: 'linkedin' as any, content: 'Test post' },
+        'user-1',
         'sint-brand',
       );
       const cancelled = cancelQueueItem(item.id);

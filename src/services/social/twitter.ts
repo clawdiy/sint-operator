@@ -8,13 +8,9 @@
 import crypto from 'crypto';
 import https from 'https';
 import type { Logger } from '../../core/types.js';
+import type { TwitterCredentials } from './types.js';
 
-export interface TwitterConfig {
-  apiKey: string;
-  apiSecret: string;
-  accessToken: string;
-  accessSecret: string;
-}
+export interface TwitterConfig extends TwitterCredentials {}
 
 export interface TweetResult {
   id: string;
@@ -27,11 +23,11 @@ export interface ThreadResult {
   threadUrl: string;
 }
 
-function getConfig(): TwitterConfig | null {
-  const apiKey = process.env.TWITTER_API_KEY;
-  const apiSecret = process.env.TWITTER_API_SECRET;
-  const accessToken = process.env.TWITTER_ACCESS_TOKEN;
-  const accessSecret = process.env.TWITTER_ACCESS_SECRET;
+function getConfig(override?: TwitterCredentials): TwitterConfig | null {
+  const apiKey = override?.apiKey ?? process.env.TWITTER_API_KEY;
+  const apiSecret = override?.apiSecret ?? process.env.TWITTER_API_SECRET;
+  const accessToken = override?.accessToken ?? process.env.TWITTER_ACCESS_TOKEN;
+  const accessSecret = override?.accessSecret ?? process.env.TWITTER_ACCESS_SECRET;
   if (!apiKey || !apiSecret || !accessToken || !accessSecret) return null;
   return { apiKey, apiSecret, accessToken, accessSecret };
 }
@@ -138,8 +134,9 @@ export async function postTweet(
   text: string,
   logger?: Logger,
   replyToId?: string,
+  credentials?: TwitterCredentials,
 ): Promise<TweetResult | null> {
-  const config = getConfig();
+  const config = getConfig(credentials);
   if (!config) {
     logger?.warn('Twitter credentials not configured');
     return null;
@@ -171,10 +168,11 @@ export async function postTweet(
 export async function postThread(
   tweets: string[],
   logger?: Logger,
+  credentials?: TwitterCredentials,
 ): Promise<ThreadResult | null> {
   if (tweets.length === 0) return null;
 
-  const config = getConfig();
+  const config = getConfig(credentials);
   if (!config) {
     logger?.warn('Twitter credentials not configured');
     return null;
@@ -184,7 +182,7 @@ export async function postThread(
   let lastId: string | undefined;
 
   for (let i = 0; i < tweets.length; i++) {
-    const result = await postTweet(tweets[i], logger, lastId);
+    const result = await postTweet(tweets[i], logger, lastId, credentials);
     if (!result) {
       logger?.error(`Thread failed at tweet ${i + 1}/${tweets.length}`);
       break;
@@ -210,8 +208,9 @@ export async function postThread(
 export async function deleteTweet(
   tweetId: string,
   logger?: Logger,
+  credentials?: TwitterCredentials,
 ): Promise<boolean> {
-  const config = getConfig();
+  const config = getConfig(credentials);
   if (!config) return false;
 
   const result = await twitterRequest('DELETE', `/2/tweets/${tweetId}`, config);
@@ -224,6 +223,6 @@ export async function deleteTweet(
 /**
  * Check if Twitter is configured.
  */
-export function isTwitterConfigured(): boolean {
-  return getConfig() !== null;
+export function isTwitterConfigured(credentials?: TwitterCredentials): boolean {
+  return getConfig(credentials) !== null;
 }

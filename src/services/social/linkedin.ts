@@ -10,20 +10,18 @@
 
 import https from 'https';
 import type { Logger } from '../../core/types.js';
+import type { LinkedInCredentials } from './types.js';
 
-export interface LinkedInConfig {
-  accessToken: string;
-  personUrn: string; // format: urn:li:person:XXXX
-}
+export interface LinkedInConfig extends LinkedInCredentials {}
 
 export interface LinkedInPostResult {
   id: string;
   url: string;
 }
 
-function getConfig(): LinkedInConfig | null {
-  const accessToken = process.env.LINKEDIN_ACCESS_TOKEN;
-  const personUrn = process.env.LINKEDIN_PERSON_URN;
+function getConfig(override?: LinkedInCredentials): LinkedInConfig | null {
+  const accessToken = override?.accessToken ?? process.env.LINKEDIN_ACCESS_TOKEN;
+  const personUrn = override?.personUrn ?? process.env.LINKEDIN_PERSON_URN;
   if (!accessToken || !personUrn) return null;
   return { accessToken, personUrn };
 }
@@ -89,8 +87,9 @@ async function linkedinRequest(
 export async function postLinkedInUpdate(
   text: string,
   logger?: Logger,
+  credentials?: LinkedInCredentials,
 ): Promise<LinkedInPostResult | null> {
-  const config = getConfig();
+  const config = getConfig(credentials);
   if (!config) {
     logger?.warn('LinkedIn credentials not configured');
     return null;
@@ -139,8 +138,9 @@ export async function postLinkedInArticle(
   title: string,
   description?: string,
   logger?: Logger,
+  credentials?: LinkedInCredentials,
 ): Promise<LinkedInPostResult | null> {
-  const config = getConfig();
+  const config = getConfig(credentials);
   if (!config) {
     logger?.warn('LinkedIn credentials not configured');
     return null;
@@ -182,15 +182,15 @@ export async function postLinkedInArticle(
 /**
  * Check if LinkedIn is configured.
  */
-export function isLinkedInConfigured(): boolean {
-  return getConfig() !== null;
+export function isLinkedInConfigured(credentials?: LinkedInCredentials): boolean {
+  return getConfig(credentials) !== null;
 }
 
 /**
  * Verify LinkedIn token is valid.
  */
-export async function verifyLinkedInToken(logger?: Logger): Promise<boolean> {
-  const config = getConfig();
+export async function verifyLinkedInToken(logger?: Logger, credentials?: LinkedInCredentials): Promise<boolean> {
+  const config = getConfig(credentials);
   if (!config) return false;
 
   const result = await linkedinRequest('GET', '/v2/me', config);
