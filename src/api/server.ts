@@ -92,6 +92,11 @@ export function getRateLimitKey(req: express.Request): string {
   return `ip:${ipKeyGenerator(req.ip ?? '127.0.0.1')}`;
 }
 
+export function shouldBypassApiAuth(path: string, authEnabled: boolean): boolean {
+  if (!authEnabled) return true;
+  return path === '/test-llm' || path.startsWith('/auth') || path.startsWith('/webhooks');
+}
+
 // ─── Rate Limiters ───────────────────────────────────────────
 
 const generalLimiter = rateLimit({
@@ -407,8 +412,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   app.use(express.json({ limit: '50mb' }));
   
-  // ─── Publish Routes ──────────────────────────────────────
-  app.use("/api/publish", createPublishRoutes());
+  // ─── Integrations ────────────────────────────────────────
   app.use("/mcp", createMCPRoutes(orchestrator));
 
   // Rate limiting
@@ -481,12 +485,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // Protect all /api routes (only when AUTH_ENABLED=true)
   app.use('/api', (req, res, next) => {
-    if (
-      process.env.AUTH_ENABLED !== 'true'
-      || req.path === '/test-llm'
-      || req.path.startsWith('/auth')
-      || req.path.startsWith('/webhooks')
-    ) {
+    if (shouldBypassApiAuth(req.path, process.env.AUTH_ENABLED === 'true')) {
       next();
       return;
     }
@@ -495,6 +494,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // ─── Onboarding / Settings / Notifications ───────────────
 
+  app.use("/api/publish", createPublishRoutes());
   app.use('/api/onboarding', createOnboardingRouter({ brandsDir }));
   app.use('/api/notifications', createNotificationsRouter());
 
