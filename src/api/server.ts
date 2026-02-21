@@ -869,6 +869,55 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     });
   });
 
+
+  // ─── Content Variants (A/B Testing) ────────────────────────
+  app.post('/api/variants', async (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+    
+    const { brandId, content, platform, count } = req.body;
+    if (!brandId || !content || !platform) {
+      return res.status(400).json({ error: 'brandId, content, and platform are required' });
+    }
+    
+    const variantCount = Math.min(count || 3, 5);
+    const brand = getBrand(brandId, brandUserId(user));
+    if (!brand) return res.status(404).json({ error: 'Brand not found' });
+    
+    try {
+      const result = await orchestrator.llm.completeJSON<{ variants: Array<{ content: string; hook: string; angle: string; tone: string }> }>(
+        \`Generate \${variantCount} distinctly different versions of this content for \${platform}.
+
+Brand: \${brand.name}
+Voice: \${JSON.stringify(brand.voice || {})}
+
+Source content: \${content.slice(0, 5000)}
+
+Each variant must use a COMPLETELY different:
+- Hook (opening line)
+- Angle (perspective/approach)  
+- Tone (within brand guidelines)
+
+Platform: \${platform}
+\${platform === 'twitter' ? 'Max 280 chars per variant.' : ''}
+\${platform === 'linkedin' ? 'Max 3000 chars per variant.' : ''}
+
+Respond with JSON: { "variants": [{ "content": "full post text", "hook": "the hook used", "angle": "the angle", "tone": "tone description" }] }\`,
+        { type: 'object' },
+        { tier: 'complex', maxTokens: 4096 }
+      );
+      
+      res.json({
+        platform,
+        brand: brand.name,
+        variants: result.data.variants || [],
+        tokensUsed: result.meta.totalTokens,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to generate variants' });
+    }
+  });
+
 app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
