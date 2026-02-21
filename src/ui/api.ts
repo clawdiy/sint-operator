@@ -254,3 +254,25 @@ export function streamRun(runId: string, handlers: {
 export const getOnboardingStatus = () => request<{needsSetup: boolean; hasApiKey: boolean; hasBrand: boolean}>('/api/onboarding/status');
 export const completeOnboarding = (data: {openaiApiKey: string; brandName: string; brandUrl?: string; brandTone?: string[]}) =>
   request<any>('/api/onboarding/setup', { method: 'POST', body: JSON.stringify(data) });
+
+// Social Account Connection
+export const getSocialStatus = () => request<{
+  twitter: {configured: boolean; handle?: string};
+  linkedin: {configured: boolean; personUrn?: string};
+}>('/api/settings/social/status');
+
+export const connectSocial = (platform: string, credentials: Record<string, string>) =>
+  request<{ok: boolean}>(\`/api/settings/social/\${platform}\`, {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  });
+
+// Publishing
+export const publishContent = (platform: string, content: string, hashtags?: string[]) =>
+  request<{success: boolean; postUrl?: string; error?: string}>('/api/publish', {
+    method: 'POST',
+    body: JSON.stringify({ platform, content, hashtags }),
+  });
+
+export const getPublishStatus = () =>
+  request<{platforms: Record<string, {configured: boolean; handle?: string}>}>('/api/publish/status');

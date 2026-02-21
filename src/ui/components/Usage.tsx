@@ -32,7 +32,7 @@ export default function Usage() {
   return (
     <div className="page">
       <h1>Usage & Metering</h1>
-      <p className="subtitle">Track token consumption, costs, and pipeline activity.</p>
+      <p className="subtitle">Track AI usage and pipeline activity.</p>
 
       <div className="toolbar">
         <select value={days} onChange={e => { setDays(Number(e.target.value)); setLoading(true); }}>
@@ -57,14 +57,14 @@ export default function Usage() {
             <div className="stat-icon">🪙</div>
             <div className="stat-body">
               <div className="stat-value">{(usage.totalTokens ?? 0).toLocaleString()}</div>
-              <div className="stat-label">Tokens Used</div>
+              <div className="stat-label">AI Calls</div>
             </div>
           </div>
           <div className="card stat-card">
             <div className="stat-icon">💰</div>
             <div className="stat-body">
               <div className="stat-value">{(usage.totalCostUnits ?? 0).toFixed(1)}</div>
-              <div className="stat-label">Cost Units</div>
+              <div className="stat-label">Credits</div>
             </div>
           </div>
         </div>
@@ -84,7 +84,7 @@ export default function Usage() {
                     style={{ width: `${(data.tokens / maxTokens) * 100}%` }}
                   />
                 </div>
-                <div className="bar-value">{data.tokens.toLocaleString()} tok</div>
+                <div className="bar-value">{data.tokens.toLocaleString()} calls</div>
               </div>
             ))}
           </div>
@@ -118,7 +118,7 @@ export default function Usage() {
           <h3>Brand Breakdown</h3>
           <table className="table">
             <thead>
-              <tr><th>Brand</th><th>Runs</th><th>Cost Units</th></tr>
+              <tr><th>Brand</th><th>Runs</th><th>Credits</th></tr>
             </thead>
             <tbody>
               {Object.entries(usage.byBrand).map(([brand, data]: [string, any]) => (

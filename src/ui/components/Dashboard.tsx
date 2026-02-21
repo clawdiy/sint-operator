@@ -265,21 +265,21 @@ export default function Dashboard({ onNavigate }: Props) {
           <div className="stat-icon">⚡</div>
           <div>
             <div className="stat-value">{inProgressRuns.length}</div>
-            <div className="stat-label">Live Runs</div>
+            <div className="stat-label">Active</div>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat-icon">🧠</div>
           <div>
             <div className="stat-value">{(usage?.totalTokens ?? 0).toLocaleString()}</div>
-            <div className="stat-label">Tokens Today</div>
+            <div className="stat-label">AI Calls</div>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat-icon">💸</div>
           <div>
             <div className="stat-value">{(usage?.totalCostUnits ?? 0).toFixed(1)}</div>
-            <div className="stat-label">Cost Units Today</div>
+            <div className="stat-label">Credits Used Today</div>
           </div>
         </div>
       </div>
@@ -514,7 +514,7 @@ export default function Dashboard({ onNavigate }: Props) {
           <div className="usage-bar-grid">
             <div className="usage-stat">
               <div className="usage-stat-header">
-                <span>Tokens Used</span>
+                <span>AI Calls</span>
                 <span className="usage-stat-value">{(usage.totalTokens ?? 0).toLocaleString()}</span>
               </div>
               <div className="usage-progress">
@@ -523,7 +523,7 @@ export default function Dashboard({ onNavigate }: Props) {
             </div>
             <div className="usage-stat">
               <div className="usage-stat-header">
-                <span>Cost Units</span>
+                <span>Credits Used</span>
                 <span className="usage-stat-value">{(usage.totalCostUnits ?? 0).toFixed(1)}</span>
               </div>
               <div className="usage-progress">

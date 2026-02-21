@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPipelines, getBrands, runPipeline, isAsyncRunStart, streamRun } from '../api';
+import { getPipelines, getBrands, runPipeline, isAsyncRunStart, streamRun, uploadAsset } from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
 
@@ -9,6 +9,7 @@ interface Pipeline {
   description: string;
   version: string;
   inputs: Array<{ name: string; type: string; description?: string; required?: boolean; default?: unknown }>;
+  steps?: Array<{ id: string; skill: string; description?: string; action?: string }>;
 }
 
 const PIPELINE_ICONS: Record<string, string> = {
@@ -25,6 +26,97 @@ const PLATFORM_OPTIONS = [
   { id: 'threads', label: 'Threads', icon: '🧵' },
   { id: 'tiktok', label: 'TikTok', icon: '🎵' },
 ];
+
+
+const SKILL_ICONS: Record<string, string> = {
+  'asset-ingester': '📥', ingester: '📥', ingest: '📥',
+  'content-analyzer': '🧠', analyzer: '🧠', analyze: '🧠',
+  'content-repurpose': '📤', repurpose: '📤', generate: '📤',
+  formatter: '✍️', writer: '✍️', publisher: '🚀',
+  default: '⚙️',
+};
+
+function getSkillIcon(skill: string): string {
+  for (const [key, icon] of Object.entries(SKILL_ICONS)) {
+    if (skill.toLowerCase().includes(key)) return icon;
+  }
+  return SKILL_ICONS.default;
+}
+
+function PipelineSteps({ steps, streamSteps, running, result }: {
+  steps: Array<{ id: string; skill: string; description?: string; action?: string }>;
+  streamSteps: any[];
+  running: boolean;
+  result: any;
+}) {
+  const completedIds = new Set(streamSteps.filter(s => s.type === 'step_complete').map(s => s.data?.step || s.data?.name));
+  const activeStep = streamSteps.length > 0 ? streamSteps[streamSteps.length - 1] : null;
+  const activeId = activeStep && activeStep.type !== 'step_complete' ? (activeStep.data?.step || activeStep.data?.name) : null;
+
+  return (
+    <div className="pipeline-flow">
+      {steps.map((step, i) => {
+        const isDone = result || completedIds.has(step.id) || completedIds.has(step.skill);
+        const isActive = running && !isDone && (activeId === step.id || activeId === step.skill || (i === 0 && running && streamSteps.length === 0));
+        const statusClass = isDone ? 'step-done' : isActive ? 'step-active' : 'step-pending';
+
+        return (
+          <React.Fragment key={step.id}>
+            {i > 0 && <div className="step-connector">→</div>}
+            <div className={`pipeline-step ${statusClass}`}>
+              <div className="pipeline-step-icon">{getSkillIcon(step.skill)}</div>
+              <div className="pipeline-step-name">{step.skill.replace(/-/g, ' ')}</div>
+              {step.action && <div className="pipeline-step-desc">{step.action.slice(0, 60)}...</div>}
+              {isDone && result && <div className="pipeline-step-link">View output ↗</div>}
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function FileDropZone({ onText }: { onText: (text: string) => void }) {
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const res = await uploadAsset(file);
+      if (res?.text) {
+        onText(res.text);
+      } else if (res?.id) {
+        onText(`[Uploaded: ${file.name}]`);
+      }
+    } catch {
+      // fallback: read as text
+      const text = await file.text();
+      onText(text);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div
+      className={`file-drop-zone ${dragging ? 'dragging' : ''}`}
+      onDragOver={e => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={e => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); }}
+      onClick={() => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.txt,.md,.pdf,.doc,.docx';
+        input.onchange = () => { if (input.files?.[0]) handleFile(input.files[0]); };
+        input.click();
+      }}
+    >
+      {uploading ? '⏳ Uploading...' : '📎 Or upload a file (drag & drop or click)'}
+    </div>
+  );
+}
+
 
 function getPipelineIcon(id: string): string {
   for (const [key, icon] of Object.entries(PIPELINE_ICONS)) {
@@ -228,6 +320,10 @@ export default function Pipelines() {
             <button className="btn small" onClick={() => { setSelected(null); setResult(null); }}>✕ Close</button>
           </div>
 
+          {selected.steps && selected.steps.length > 0 && (
+            <PipelineSteps steps={selected.steps} streamSteps={streamSteps} running={running} result={result} />
+          )}
+
           <div className="runner-form">
             <div className="form-group">
               <label>Brand <span className="required">*</span></label>
@@ -283,12 +379,15 @@ export default function Pipelines() {
                     onChange={e => setInputs({ ...inputs, [inp.name]: e.target.value })}
                   />
                 ) : isLongTextInput(inp) ? (
-                  <textarea
-                    placeholder={inp.description || inp.name}
-                    value={inputs[inp.name] ?? ''}
-                    onChange={e => setInputs({ ...inputs, [inp.name]: e.target.value })}
-                    style={{ minHeight: '96px' }}
-                  />
+                  <>
+                    <textarea
+                      placeholder={inp.description || inp.name}
+                      value={inputs[inp.name] ?? ''}
+                      onChange={e => setInputs({ ...inputs, [inp.name]: e.target.value })}
+                      style={{ minHeight: '96px' }}
+                    />
+                    <FileDropZone onText={(text) => setInputs({ ...inputs, [inp.name]: text })} />
+                  </>
                 ) : (
                   <input
                     type="text"

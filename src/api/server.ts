@@ -650,6 +650,42 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     }
   });
 
+
+  // ─── Social Account Connection ──────────────────────────
+
+  app.post('/api/settings/social/:platform', (req, res) => {
+    const { platform } = req.params;
+    const credentials = req.body;
+
+    if (platform === 'twitter') {
+      process.env.TWITTER_API_KEY = credentials.apiKey;
+      process.env.TWITTER_API_SECRET = credentials.apiSecret;
+      process.env.TWITTER_ACCESS_TOKEN = credentials.accessToken;
+      process.env.TWITTER_ACCESS_SECRET = credentials.accessSecret;
+      if (credentials.handle) process.env.TWITTER_HANDLE = credentials.handle;
+    } else if (platform === 'linkedin') {
+      process.env.LINKEDIN_ACCESS_TOKEN = credentials.accessToken;
+      process.env.LINKEDIN_PERSON_URN = credentials.personUrn;
+    } else {
+      res.status(400).json({ error: `Unsupported platform: ${platform}` });
+      return;
+    }
+
+    res.json({ ok: true, platform });
+  });
+
+  app.get('/api/settings/social/status', (_req, res) => {
+    const twitter = {
+      configured: !!(process.env.TWITTER_API_KEY && process.env.TWITTER_ACCESS_TOKEN),
+      handle: process.env.TWITTER_HANDLE || '@connected',
+    };
+    const linkedin = {
+      configured: !!(process.env.LINKEDIN_ACCESS_TOKEN),
+      personUrn: process.env.LINKEDIN_PERSON_URN || '',
+    };
+    res.json({ twitter, linkedin });
+  });
+
   // ─── Pipelines ──────────────────────────────────────────
 
   app.get('/api/pipelines', (_req, res) => {
