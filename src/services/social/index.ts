@@ -7,6 +7,12 @@
 
 import { postTweet, postThread, isTwitterConfigured, type TweetResult, type ThreadResult } from './twitter.js';
 import { postLinkedInUpdate, postLinkedInArticle, isLinkedInConfigured, verifyLinkedInToken, type LinkedInPostResult } from './linkedin.js';
+import {
+  postInstagramImage,
+  isInstagramConfigured,
+  verifyInstagramToken,
+  type InstagramPostResult,
+} from './instagram.js';
 import type { Platform, Logger } from '../../core/types.js';
 
 // ─── Types ────────────────────────────────────────────────────
@@ -54,7 +60,16 @@ export async function publish(
   request: PublishRequest,
   logger?: Logger,
 ): Promise<PublishResult> {
-  const { platform, content, hashtags, articleUrl, articleTitle, articleDescription, isThread } = request;
+  const {
+    platform,
+    content,
+    hashtags,
+    media,
+    articleUrl,
+    articleTitle,
+    articleDescription,
+    isThread,
+  } = request;
 
   // Append hashtags to content if present
   const fullContent = hashtags && hashtags.length > 0
@@ -112,8 +127,33 @@ export async function publish(
       return { platform, success: false, error: 'LinkedIn posting failed' };
     }
 
+    case 'instagram': {
+      if (!isInstagramConfigured()) {
+        return {
+          platform,
+          success: false,
+          error: 'Instagram credentials not configured. Set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID.',
+        };
+      }
+
+      const mediaUrl = media?.[0];
+      if (!mediaUrl) {
+        return {
+          platform,
+          success: false,
+          error: 'Instagram requires at least one public media URL in request.media[0].',
+        };
+      }
+
+      const result = await postInstagramImage(fullContent, mediaUrl, logger);
+      if (result) {
+        return { platform, success: true, postId: result.id, postUrl: result.url };
+      }
+      return { platform, success: false, error: 'Instagram posting failed' };
+    }
+
     default:
-      return { platform, success: false, error: `Publishing to ${platform} is not yet supported. Supported: twitter, linkedin.` };
+      return { platform, success: false, error: `Publishing to ${platform} is not yet supported. Supported: twitter, linkedin, instagram.` };
   }
 }
 
@@ -171,11 +211,26 @@ export async function processQueue(logger?: Logger): Promise<PublishResult[]> {
 
   const results: PublishResult[] = [];
   for (const item of pending) {
-    item.status = 'published';
-    const result = await publish(item.request, logger);
-    item.result = result;
-    if (!result.success) item.status = 'failed';
-    results.push(result);
+    try {
+      const result = await publish(item.request, logger);
+      item.result = result;
+      item.status = result.success ? 'published' : 'failed';
+      results.push(result);
+    } catch (err) {
+      const failedResult: PublishResult = {
+        platform: item.request.platform,
+        success: false,
+        error: String(err),
+      };
+      item.result = failedResult;
+      item.status = 'failed';
+      logger?.error('Queued publish failed with exception', {
+        queueItemId: item.id,
+        platform: item.request.platform,
+        error: String(err),
+      });
+      results.push(failedResult);
+    }
   }
   return results;
 }
@@ -200,6 +255,13 @@ export function cancelQueueItem(id: string): boolean {
   return true;
 }
 
+/**
+ * Test hook for clearing in-memory queue state.
+ */
+export function __resetPublishQueueForTests(): void {
+  publishQueue.splice(0, publishQueue.length);
+}
+
 // ─── Status ───────────────────────────────────────────────────
 
 /**
@@ -209,7 +271,7 @@ export function getConfiguredPlatforms(): Record<string, boolean> {
   return {
     twitter: isTwitterConfigured(),
     linkedin: isLinkedInConfigured(),
-    instagram: false,
+    instagram: isInstagramConfigured(),
     tiktok: false,
     facebook: false,
     telegram: false,
@@ -233,9 +295,13 @@ export async function verifyAllTokens(logger?: Logger): Promise<Record<string, b
     results.linkedin = await verifyLinkedInToken(logger);
   }
 
+  if (isInstagramConfigured()) {
+    results.instagram = await verifyInstagramToken(logger);
+  }
+
   return results;
 }
 
 // Re-export
-export { isTwitterConfigured, isLinkedInConfigured };
-export type { TweetResult, ThreadResult, LinkedInPostResult };
+export { isTwitterConfigured, isLinkedInConfigured, isInstagramConfigured };
+export type { TweetResult, ThreadResult, LinkedInPostResult, InstagramPostResult };

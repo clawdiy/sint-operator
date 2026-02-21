@@ -212,6 +212,37 @@ export const cancelRun = async (id: string) => {
   return normalizeRunPayload(res.run);
 };
 
+// Social Publishing
+export interface PublishRequestPayload {
+  platform: string;
+  content: string;
+  hashtags?: string[];
+  media?: string[];
+  articleUrl?: string;
+  articleTitle?: string;
+  articleDescription?: string;
+  isThread?: boolean;
+}
+
+export interface PublishResultPayload {
+  platform: string;
+  success: boolean;
+  postId?: string;
+  postUrl?: string;
+  error?: string;
+}
+
+export const publishContent = (payload: PublishRequestPayload) =>
+  request<PublishResultPayload>('/api/publish', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const getPublishPlatformStatus = (verify = false) =>
+  request<{ platforms: Record<string, boolean>; verified?: Record<string, boolean> }>(
+    verify ? '/api/publish/status?verify=true' : '/api/publish/status',
+  );
+
 // Usage
 export const getUsage = (days?: number) => request<{
   period: string; totalRuns: number; totalTokens: number; totalCostUnits: number;

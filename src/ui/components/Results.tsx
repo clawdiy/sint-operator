@@ -1,5 +1,13 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { getRuns, getRun, normalizeRunPayload, isRunInProgress, cancelRun } from '../api';
+import {
+  getRuns,
+  getRun,
+  normalizeRunPayload,
+  isRunInProgress,
+  cancelRun,
+  publishContent,
+  getPublishPlatformStatus,
+} from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
 
@@ -13,6 +21,9 @@ const PLATFORM_ICONS: Record<string, string> = {
   threads: '🧵', tiktok: '🎵', blog: '📝', email: '✉️',
 };
 
+const DIRECT_PUBLISH_PLATFORMS = new Set(['twitter', 'linkedin', 'instagram']);
+const PUBLISH_PLATFORM_ALIASES: Record<string, string> = { threads: 'twitter' };
+
 export default function Results() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -24,6 +35,8 @@ export default function Results() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [canceling, setCanceling] = useState(false);
+  const [publishingKey, setPublishingKey] = useState('');
+  const [publishPlatforms, setPublishPlatforms] = useState<Record<string, boolean>>({});
 
   const refreshRuns = useCallback(async () => {
     setRefreshing(true);
@@ -46,6 +59,16 @@ export default function Results() {
     }
   }, []);
 
+  const refreshPublishStatus = useCallback(async () => {
+    try {
+      const status = await getPublishPlatformStatus();
+      setPublishPlatforms(status.platforms ?? {});
+    } catch {
+      // Non-fatal for results viewing.
+      setPublishPlatforms({});
+    }
+  }, []);
+
   const filteredRuns = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return runs.filter(run => {
@@ -63,6 +86,10 @@ export default function Results() {
       })
       .finally(() => setLoading(false));
   }, [addToast, refreshRuns]);
+
+  useEffect(() => {
+    void refreshPublishStatus();
+  }, [refreshPublishStatus]);
 
   const viewRun = async (id: string) => {
     try {
@@ -145,6 +172,56 @@ export default function Results() {
     a.click();
     URL.revokeObjectURL(url);
     addToast('success', 'Exported as JSON');
+  };
+
+  const handlePublishOutput = async (out: any, key: string) => {
+    const sourcePlatform = String(out?.platform ?? '');
+    const platform = PUBLISH_PLATFORM_ALIASES[sourcePlatform] ?? sourcePlatform;
+
+    if (!DIRECT_PUBLISH_PLATFORMS.has(platform)) {
+      addToast('error', `Publishing is not supported for ${sourcePlatform}`);
+      return;
+    }
+
+    const content = String(out?.content ?? '').trim();
+    if (!content) {
+      addToast('error', 'Output is empty and cannot be published');
+      return;
+    }
+
+    if (publishPlatforms[platform] === false) {
+      addToast('error', `${platform} is not configured in server credentials`);
+      return;
+    }
+
+    const media = Array.isArray(out?.media)
+      ? out.media.filter((entry: unknown): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+      : undefined;
+    if (platform === 'instagram' && (!media || media.length === 0)) {
+      addToast('error', 'Instagram publishing requires at least one media URL');
+      return;
+    }
+
+    setPublishingKey(key);
+    try {
+      const result = await publishContent({
+        platform,
+        content,
+        hashtags: extractHashtags(content),
+        media,
+      });
+
+      if (result.success) {
+        addToast('success', result.postUrl ? `Published to ${platform}: ${result.postUrl}` : `Published to ${platform}`);
+      } else {
+        addToast('error', result.error || `Failed to publish to ${platform}`);
+      }
+    } catch (err: any) {
+      addToast('error', err?.message || `Failed to publish to ${platform}`);
+    } finally {
+      setPublishingKey('');
+      void refreshPublishStatus();
+    }
   };
 
   const handleCancelSelectedRun = async () => {
@@ -300,6 +377,21 @@ export default function Results() {
                     const charCount = (out.content || '').length;
                     const isOver = limit > 0 && charCount > limit;
                     const hashtags = extractHashtags(out.content || '');
+                    const sourcePlatform = String(out.platform || '');
+                    const publishPlatform = PUBLISH_PLATFORM_ALIASES[sourcePlatform] ?? sourcePlatform;
+                    const canDirectPublish = DIRECT_PUBLISH_PLATFORMS.has(publishPlatform);
+                    const isConfigured = publishPlatforms[publishPlatform];
+                    const hasInstagramMedia = publishPlatform !== 'instagram' || (Array.isArray(out.media) && out.media.length > 0);
+                    const publishDisabled =
+                      publishingKey !== '' ||
+                      !canDirectPublish ||
+                      isConfigured === false ||
+                      !hasInstagramMedia ||
+                      String(out.content || '').trim().length === 0;
+                    let publishTitle = `Publish to ${publishPlatform}`;
+                    if (!canDirectPublish) publishTitle = `Publishing not available for ${sourcePlatform}`;
+                    if (isConfigured === false) publishTitle = `${publishPlatform} is not configured`;
+                    if (!hasInstagramMedia) publishTitle = 'Instagram publishing requires at least one media URL';
 
                     return (
                       <div key={i} className="platform-content-card">
@@ -314,6 +406,18 @@ export default function Results() {
                                 {charCount}/{limit}
                               </span>
                             )}
+                            <button
+                              className="btn small"
+                              onClick={() => void handlePublishOutput(out, `publish-${i}`)}
+                              disabled={publishDisabled}
+                              title={publishTitle}
+                            >
+                              {publishingKey === `publish-${i}`
+                                ? 'Publishing…'
+                                : canDirectPublish
+                                  ? `🚀 Publish ${publishPlatform}`
+                                  : 'Publish N/A'}
+                            </button>
                             <button
                               className={`btn small copy-btn ${copiedId === `out-${i}` ? 'copied' : ''}`}
                               onClick={() => copyToClipboard(out.content, `out-${i}`)}

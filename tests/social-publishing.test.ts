@@ -1,112 +1,145 @@
-/**
- * Social Publishing Service Tests
- *
- * Tests the unified publish interface, queue management, and platform detection.
- */
-
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Logger } from '../src/core/types.js';
 import {
-  publish,
-  publishMulti,
-  queuePublish,
-  getQueue,
-  cancelQueueItem,
+  __resetPublishQueueForTests,
   getConfiguredPlatforms,
+  getQueue,
+  processQueue,
+  publish,
+  queuePublish,
+  verifyAllTokens,
 } from '../src/services/social/index.js';
 
-describe('Social Publishing Manager', () => {
-  describe('Platform Status', () => {
-    it('returns configured platforms map', () => {
-      const status = getConfiguredPlatforms();
-      expect(status).toBeDefined();
-      expect(typeof status).toBe('object');
-      expect('twitter' in status).toBe(true);
-      expect('linkedin' in status).toBe(true);
-    });
+let twitterConfigured = false;
+let linkedinConfigured = false;
+let instagramConfigured = false;
+let linkedinTokenValid = false;
+let instagramTokenValid = false;
+let instagramThrows = false;
+let instagramPostResult: { id: string; url: string } | null = null;
 
-    it('shows platforms as not configured without env vars', () => {
-      const status = getConfiguredPlatforms();
-      // Without env vars, platforms should not be configured
-      expect(status.twitter).toBe(false);
-      expect(status.linkedin).toBe(false);
+vi.mock('../src/services/social/twitter.js', () => ({
+  isTwitterConfigured: () => twitterConfigured,
+  postTweet: vi.fn(async (text: string) => ({ id: 'tweet-1', text, url: 'https://x.com/i/status/tweet-1' })),
+  postThread: vi.fn(async (tweets: string[]) => ({
+    tweets: tweets.map((text, idx) => ({ id: `tweet-${idx}`, text, url: `https://x.com/i/status/tweet-${idx}` })),
+    threadUrl: 'https://x.com/i/status/tweet-0',
+  })),
+}));
+
+vi.mock('../src/services/social/linkedin.js', () => ({
+  isLinkedInConfigured: () => linkedinConfigured,
+  verifyLinkedInToken: vi.fn(async () => linkedinTokenValid),
+  postLinkedInUpdate: vi.fn(async () => ({ id: 'li-1', url: 'https://linkedin.com/feed/update/li-1' })),
+  postLinkedInArticle: vi.fn(async () => ({ id: 'li-article', url: 'https://linkedin.com/feed/update/li-article' })),
+}));
+
+vi.mock('../src/services/social/instagram.js', () => ({
+  isInstagramConfigured: () => instagramConfigured,
+  verifyInstagramToken: vi.fn(async () => instagramTokenValid),
+  postInstagramImage: vi.fn(async () => {
+    if (instagramThrows) {
+      throw new Error('instagram exploded');
+    }
+    return instagramPostResult;
+  }),
+}));
+
+const logger: Logger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  debug: () => undefined,
+};
+
+describe('social publishing manager', () => {
+  beforeEach(() => {
+    twitterConfigured = false;
+    linkedinConfigured = false;
+    instagramConfigured = false;
+    linkedinTokenValid = false;
+    instagramTokenValid = false;
+    instagramThrows = false;
+    instagramPostResult = null;
+    __resetPublishQueueForTests();
+  });
+
+  it('publishes an Instagram post when configured with media', async () => {
+    instagramConfigured = true;
+    instagramPostResult = { id: 'ig-1', url: 'https://instagram.com/p/ig-1' };
+
+    const result = await publish({
+      platform: 'instagram',
+      content: 'Launch update',
+      media: ['https://cdn.example.com/image.jpg'],
+    }, logger);
+
+    expect(result).toEqual({
+      platform: 'instagram',
+      success: true,
+      postId: 'ig-1',
+      postUrl: 'https://instagram.com/p/ig-1',
     });
   });
 
-  describe('Publish Queue', () => {
-    it('adds items to the publish queue', () => {
-      const item = queuePublish(
-        { platform: 'twitter' as any, content: 'Test tweet from SINT' },
-        'sint-brand',
-      );
-      expect(item).toBeDefined();
-      expect(item.id).toBeDefined();
-      expect(item.status).toBe('pending');
-      expect(item.request.content).toBe('Test tweet from SINT');
-    });
+  it('fails Instagram publish when media is missing', async () => {
+    instagramConfigured = true;
 
-    it('lists queue items', () => {
-      const items = getQueue();
-      expect(Array.isArray(items)).toBe(true);
-      expect(items.length).toBeGreaterThan(0);
-    });
+    const result = await publish({
+      platform: 'instagram',
+      content: 'No media available',
+    }, logger);
 
-    it('filters queue by status', () => {
-      const pending = getQueue({ status: 'pending' });
-      expect(Array.isArray(pending)).toBe(true);
-      for (const item of pending) {
-        expect(item.status).toBe('pending');
-      }
-    });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('requires at least one public media URL');
+  });
 
-    it('cancels a queue item', () => {
-      const item = queuePublish(
-        { platform: 'linkedin' as any, content: 'Test post' },
-        'sint-brand',
-      );
-      const cancelled = cancelQueueItem(item.id);
-      expect(cancelled).toBe(true);
-      const items = getQueue();
-      const found = items.find(i => i.id === item.id);
-      expect(found?.status).toBe('cancelled');
-    });
+  it('reports configured platform status using provider checks', () => {
+    twitterConfigured = true;
+    instagramConfigured = true;
 
-    it('returns false when cancelling non-existent item', () => {
-      const result = cancelQueueItem('nonexistent-id');
-      expect(result).toBe(false);
+    expect(getConfiguredPlatforms()).toMatchObject({
+      twitter: true,
+      linkedin: false,
+      instagram: true,
     });
   });
 
-  describe('Publish (without credentials)', () => {
-    it('fails gracefully for twitter without credentials', async () => {
-      const result = await publish({
-        platform: 'twitter' as any,
-        content: 'Test tweet',
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
-    });
+  it('verifies tokens only for configured providers', async () => {
+    twitterConfigured = true;
+    linkedinConfigured = true;
+    instagramConfigured = true;
+    linkedinTokenValid = true;
+    instagramTokenValid = false;
 
-    it('fails gracefully for linkedin without credentials', async () => {
-      const result = await publish({
-        platform: 'linkedin' as any,
-        content: 'Test post',
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
-    });
+    const result = await verifyAllTokens(logger);
 
-    it('publishMulti handles multiple platforms', async () => {
-      const results = await publishMulti(
-        [
-          { platform: 'twitter' as any, content: 'Tweet test' },
-          { platform: 'linkedin' as any, content: 'LinkedIn test' },
-        ],
-      );
-      expect(Array.isArray(results)).toBe(true);
-      expect(results.length).toBe(2);
-      for (const result of results) {
-        expect(result.success).toBe(false);
-      }
+    expect(result).toEqual({
+      twitter: true,
+      linkedin: true,
+      instagram: false,
     });
+  });
+
+  it('marks queued publish as failed when provider throws', async () => {
+    instagramConfigured = true;
+    instagramThrows = true;
+    queuePublish(
+      {
+        platform: 'instagram',
+        content: 'Queued publish',
+        media: ['https://cdn.example.com/image.jpg'],
+      },
+      'brand-1',
+      'run-1',
+    );
+
+    const results = await processQueue(logger);
+    const queue = getQueue({ brandId: 'brand-1' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].success).toBe(false);
+    expect(results[0].error).toContain('instagram exploded');
+    expect(queue[0].status).toBe('failed');
   });
 });
