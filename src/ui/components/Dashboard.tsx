@@ -395,7 +395,7 @@ export default function Dashboard({ onNavigate }: Props) {
             </div>
           </div>
           <button className={`btn primary ${repurposeLoading ? 'btn-loading' : ''}`} onClick={handleRepurpose} disabled={repurposeLoading || !hasBrands} style={{ width: '100%' }}>
-            {!hasBrands ? 'Create Brand First' : repurposeLoading ? 'Running...' : '▶ Repurpose'}
+            {!hasBrands ? 'Create Brand First' : repurposeLoading ? 'Running...' : '▶ Repurpose ⌘↵'}
           </button>
           {repurposeLoading && <div className="progress-bar"><div className="progress-bar-fill" /></div>}
         </div>
@@ -416,6 +416,7 @@ export default function Dashboard({ onNavigate }: Props) {
               placeholder="e.g. How AI transforms content marketing"
               value={blogTopic}
               onChange={e => setBlogTopic(e.target.value)}
+              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !blogLoading) handleBlog(); }}
             />
           </div>
           <div className="form-group">
@@ -511,7 +512,7 @@ export default function Dashboard({ onNavigate }: Props) {
                   </span>
                   {run.metering?.totalTokens > 0 && (
                     <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      {run.metering.totalTokens.toLocaleString()} tok
+                      {run.metering.totalTokens.toLocaleString()} calls
                     </span>
                   )}
                 </div>
