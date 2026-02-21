@@ -1,47 +1,58 @@
 openapi: 3.0.3
 info:
   title: SINT Operator API
-  description: Marketing AI platform — repurpose content, manage pipelines, publish to social channels.
+  description: Marketing AI platform — repurpose content, manage pipelines, publish
+    to social channels.
   version: 1.0.0
 servers:
-  - url: http://localhost:3000
-    description: Local dev
+- url: http://localhost:3000
+  description: Local dev
 security:
-  - BearerAuth: []
+- BearerAuth: []
 tags:
-  - name: Quick Actions
-    description: One-click content generation
-  - name: Pipelines
-    description: Pipeline definitions and execution
-  - name: Runs
-    description: Pipeline run history and streaming
-  - name: Brands
-    description: Brand profile management
-  - name: Assets
-    description: File uploads and asset management
-  - name: Skills
-    description: Available AI skills
-  - name: Usage
-    description: Usage tracking and limits
-  - name: Settings
-    description: API key configuration
-  - name: Social Publishing
-    description: Publish content to social platforms
-  - name: MCP
-    description: Model Context Protocol tool server
-  - name: Notifications
-    description: In-app notifications
-  - name: Onboarding
-    description: User onboarding flow
-  - name: Auth
-    description: Authentication endpoints
-  - name: System
-    description: Health checks
-
+- name: Quick Actions
+  description: One-click content generation
+- name: Pipelines
+  description: Pipeline definitions and execution
+- name: Runs
+  description: Pipeline run history and streaming
+- name: Brands
+  description: Brand profile management
+- name: Assets
+  description: File uploads and asset management
+- name: Skills
+  description: Available AI skills
+- name: Usage
+  description: Usage tracking and limits
+- name: Settings
+  description: API key configuration
+- name: Social Publishing
+  description: Publish content to social platforms
+- name: MCP
+  description: Model Context Protocol tool server
+- name: Notifications
+  description: In-app notifications
+- name: Onboarding
+  description: User onboarding flow
+- name: Auth
+  description: Authentication endpoints
+- name: System
+  description: Health checks
+- name: Templates
+  description: Quick content templates
+- name: Schedules
+  description: Scheduled pipeline runs
+- name: Analytics
+  description: Content analytics and insights
+- name: Variants
+  description: Content variant generation
+- name: Export
+  description: Data export
 paths:
   /health:
     get:
-      tags: [System]
+      tags:
+      - System
       summary: Health check
       security: []
       responses:
@@ -55,10 +66,10 @@ paths:
                   status:
                     type: string
                     example: ok
-
   /api/auth/signup:
     post:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Create account
       security: []
       requestBody:
@@ -67,7 +78,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, password]
+              required:
+              - email
+              - password
               properties:
                 email:
                   type: string
@@ -84,10 +97,10 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-
   /api/auth/login:
     post:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Log in
       security: []
       requestBody:
@@ -96,7 +109,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, password]
+              required:
+              - email
+              - password
               properties:
                 email:
                   type: string
@@ -111,10 +126,10 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
-
   /api/auth/me:
     get:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Get current user
       responses:
         '200':
@@ -130,10 +145,10 @@ paths:
                     type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
-
   /api/repurpose:
     post:
-      tags: [Quick Actions]
+      tags:
+      - Quick Actions
       summary: Repurpose content across formats
       requestBody:
         required: true
@@ -141,7 +156,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [input]
+              required:
+              - input
               properties:
                 input:
                   type: string
@@ -164,10 +180,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/ServerError'
-
   /api/blog:
     post:
-      tags: [Quick Actions]
+      tags:
+      - Quick Actions
       summary: Generate blog content
       requestBody:
         required: true
@@ -175,7 +191,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [topic]
+              required:
+              - topic
               properties:
                 topic:
                   type: string
@@ -194,10 +211,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/ServerError'
-
   /api/calendar:
     post:
-      tags: [Quick Actions]
+      tags:
+      - Quick Actions
       summary: Generate content calendar
       requestBody:
         required: true
@@ -226,10 +243,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/ServerError'
-
   /api/pipelines:
     get:
-      tags: [Pipelines]
+      tags:
+      - Pipelines
       summary: List all pipelines
       responses:
         '200':
@@ -240,17 +257,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Pipeline'
-
   /api/pipelines/{id}:
     get:
-      tags: [Pipelines]
+      tags:
+      - Pipelines
       summary: Get pipeline by ID
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Pipeline details
@@ -260,17 +277,17 @@ paths:
                 $ref: '#/components/schemas/Pipeline'
         '404':
           description: Not found
-
   /api/pipelines/{id}/run:
     post:
-      tags: [Pipelines]
+      tags:
+      - Pipelines
       summary: Execute a pipeline
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -296,27 +313,31 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/ServerError'
-
   /api/runs:
     get:
-      tags: [Runs]
+      tags:
+      - Runs
       summary: List runs
       parameters:
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 20
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            default: 0
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [running, completed, failed, cancelled]
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 20
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - running
+          - completed
+          - failed
+          - cancelled
       responses:
         '200':
           description: Run list
@@ -331,17 +352,17 @@ paths:
                       $ref: '#/components/schemas/RunSummary'
                   total:
                     type: integer
-
   /api/runs/{id}:
     get:
-      tags: [Runs]
+      tags:
+      - Runs
       summary: Get run details
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Run details
@@ -351,17 +372,39 @@ paths:
                 $ref: '#/components/schemas/Run'
         '404':
           description: Not found
-
+    delete:
+      tags:
+      - Runs
+      summary: Delete a run
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Run deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '404':
+          description: Not found
   /api/runs/{id}/stream:
     get:
-      tags: [Runs]
+      tags:
+      - Runs
       summary: Stream run output (SSE)
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Server-Sent Events stream
@@ -369,17 +412,17 @@ paths:
             text/event-stream:
               schema:
                 type: string
-
   /api/runs/{id}/cancel:
     post:
-      tags: [Runs]
+      tags:
+      - Runs
       summary: Cancel a running pipeline
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Run cancelled
@@ -392,10 +435,10 @@ paths:
                     type: boolean
         '404':
           description: Not found
-
   /api/brands:
     get:
-      tags: [Brands]
+      tags:
+      - Brands
       summary: List brands
       responses:
         '200':
@@ -407,7 +450,8 @@ paths:
                 items:
                   $ref: '#/components/schemas/Brand'
     post:
-      tags: [Brands]
+      tags:
+      - Brands
       summary: Create a brand
       requestBody:
         required: true
@@ -424,17 +468,17 @@ paths:
                 $ref: '#/components/schemas/Brand'
         '400':
           $ref: '#/components/responses/BadRequest'
-
   /api/brands/{id}:
     get:
-      tags: [Brands]
+      tags:
+      - Brands
       summary: Get brand by ID
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Brand details
@@ -444,10 +488,10 @@ paths:
                 $ref: '#/components/schemas/Brand'
         '404':
           description: Not found
-
   /api/assets:
     get:
-      tags: [Assets]
+      tags:
+      - Assets
       summary: List assets
       responses:
         '200':
@@ -458,10 +502,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Asset'
-
   /api/assets/upload:
     post:
-      tags: [Assets]
+      tags:
+      - Assets
       summary: Upload a file asset
       requestBody:
         required: true
@@ -482,10 +526,10 @@ paths:
                 $ref: '#/components/schemas/Asset'
         '400':
           $ref: '#/components/responses/BadRequest'
-
   /api/skills:
     get:
-      tags: [Skills]
+      tags:
+      - Skills
       summary: List available AI skills
       responses:
         '200':
@@ -496,10 +540,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Skill'
-
   /api/usage:
     get:
-      tags: [Usage]
+      tags:
+      - Usage
       summary: Get usage history
       responses:
         '200':
@@ -509,10 +553,10 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-
   /api/usage/current:
     get:
-      tags: [Usage]
+      tags:
+      - Usage
       summary: Get current period usage
       responses:
         '200':
@@ -528,10 +572,10 @@ paths:
                     type: integer
                   period:
                     type: string
-
   /api/usage/limits:
     post:
-      tags: [Usage]
+      tags:
+      - Usage
       summary: Set usage limits
       requestBody:
         required: true
@@ -554,10 +598,10 @@ paths:
                 properties:
                   ok:
                     type: boolean
-
   /api/settings/api-key:
     get:
-      tags: [Settings]
+      tags:
+      - Settings
       summary: Check if OpenAI API key is configured
       responses:
         '200':
@@ -572,7 +616,8 @@ paths:
                   preview:
                     type: string
     post:
-      tags: [Settings]
+      tags:
+      - Settings
       summary: Set OpenAI API key
       requestBody:
         required: true
@@ -580,7 +625,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [apiKey]
+              required:
+              - apiKey
               properties:
                 apiKey:
                   type: string
@@ -595,7 +641,8 @@ paths:
                   ok:
                     type: boolean
     delete:
-      tags: [Settings]
+      tags:
+      - Settings
       summary: Remove OpenAI API key
       responses:
         '200':
@@ -607,10 +654,10 @@ paths:
                 properties:
                   ok:
                     type: boolean
-
   /api/settings/anthropic-key:
     get:
-      tags: [Settings]
+      tags:
+      - Settings
       summary: Check if Anthropic API key is configured
       responses:
         '200':
@@ -625,7 +672,8 @@ paths:
                   preview:
                     type: string
     post:
-      tags: [Settings]
+      tags:
+      - Settings
       summary: Set Anthropic API key
       requestBody:
         required: true
@@ -633,7 +681,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [apiKey]
+              required:
+              - apiKey
               properties:
                 apiKey:
                   type: string
@@ -647,10 +696,10 @@ paths:
                 properties:
                   ok:
                     type: boolean
-
   /api/publish:
     post:
-      tags: [Social Publishing]
+      tags:
+      - Social Publishing
       summary: Publish content to a platform
       requestBody:
         required: true
@@ -658,11 +707,17 @@ paths:
           application/json:
             schema:
               type: object
-              required: [platform, content]
+              required:
+              - platform
+              - content
               properties:
                 platform:
                   type: string
-                  enum: [twitter, linkedin, facebook, instagram]
+                  enum:
+                  - twitter
+                  - linkedin
+                  - facebook
+                  - instagram
                 content:
                   type: string
                 mediaUrl:
@@ -683,10 +738,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/ServerError'
-
   /api/publish/multi:
     post:
-      tags: [Social Publishing]
+      tags:
+      - Social Publishing
       summary: Publish to multiple platforms
       requestBody:
         required: true
@@ -694,7 +749,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [platforms, content]
+              required:
+              - platforms
+              - content
               properties:
                 platforms:
                   type: array
@@ -712,10 +769,10 @@ paths:
                 additionalProperties: true
         '400':
           $ref: '#/components/responses/BadRequest'
-
   /api/publish/queue:
     get:
-      tags: [Social Publishing]
+      tags:
+      - Social Publishing
       summary: List queued posts
       responses:
         '200':
@@ -727,7 +784,8 @@ paths:
                 items:
                   $ref: '#/components/schemas/QueuedPost'
     post:
-      tags: [Social Publishing]
+      tags:
+      - Social Publishing
       summary: Add post to queue
       requestBody:
         required: true
@@ -735,7 +793,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [platform, content, scheduledAt]
+              required:
+              - platform
+              - content
+              - scheduledAt
               properties:
                 platform:
                   type: string
@@ -751,17 +812,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/QueuedPost'
-
   /api/publish/queue/{id}:
     delete:
-      tags: [Social Publishing]
+      tags:
+      - Social Publishing
       summary: Remove post from queue
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Removed
@@ -772,10 +833,10 @@ paths:
                 properties:
                   ok:
                     type: boolean
-
   /api/publish/process:
     post:
-      tags: [Social Publishing]
+      tags:
+      - Social Publishing
       summary: Process queued posts now
       responses:
         '200':
@@ -785,10 +846,10 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-
   /api/publish/status:
     get:
-      tags: [Social Publishing]
+      tags:
+      - Social Publishing
       summary: Get publishing platform connection status
       responses:
         '200':
@@ -802,10 +863,10 @@ paths:
                   properties:
                     connected:
                       type: boolean
-
   /mcp/tools:
     get:
-      tags: [MCP]
+      tags:
+      - MCP
       summary: List available MCP tools
       security: []
       responses:
@@ -817,10 +878,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/MCPTool'
-
   /mcp/tools/call:
     post:
-      tags: [MCP]
+      tags:
+      - MCP
       summary: Call an MCP tool
       security: []
       requestBody:
@@ -829,7 +890,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name]
+              required:
+              - name
               properties:
                 name:
                   type: string
@@ -857,10 +919,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/ServerError'
-
   /mcp/health:
     get:
-      tags: [MCP]
+      tags:
+      - MCP
       summary: MCP server health
       security: []
       responses:
@@ -873,10 +935,10 @@ paths:
                 properties:
                   status:
                     type: string
-
   /api/notifications:
     get:
-      tags: [Notifications]
+      tags:
+      - Notifications
       summary: List notifications
       responses:
         '200':
@@ -887,17 +949,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Notification'
-
   /api/notifications/{id}/read:
     post:
-      tags: [Notifications]
+      tags:
+      - Notifications
       summary: Mark notification as read
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Marked read
@@ -908,10 +970,10 @@ paths:
                 properties:
                   ok:
                     type: boolean
-
   /api/notifications/read-all:
     post:
-      tags: [Notifications]
+      tags:
+      - Notifications
       summary: Mark all notifications as read
       responses:
         '200':
@@ -923,10 +985,10 @@ paths:
                 properties:
                   ok:
                     type: boolean
-
   /api/notifications/stream:
     get:
-      tags: [Notifications]
+      tags:
+      - Notifications
       summary: Stream notifications (SSE)
       responses:
         '200':
@@ -935,10 +997,10 @@ paths:
             text/event-stream:
               schema:
                 type: string
-
   /api/onboarding/status:
     get:
-      tags: [Onboarding]
+      tags:
+      - Onboarding
       summary: Get onboarding status
       responses:
         '200':
@@ -954,10 +1016,10 @@ paths:
                     type: object
                     additionalProperties:
                       type: boolean
-
   /api/onboarding/setup:
     post:
-      tags: [Onboarding]
+      tags:
+      - Onboarding
       summary: Complete onboarding setup
       requestBody:
         required: true
@@ -984,10 +1046,10 @@ paths:
                     type: boolean
         '400':
           $ref: '#/components/responses/BadRequest'
-
   /api/test-llm:
     post:
-      tags: [System]
+      tags:
+      - System
       summary: Test LLM connectivity
       requestBody:
         content:
@@ -1009,14 +1071,303 @@ paths:
                     type: string
         '500':
           $ref: '#/components/responses/ServerError'
-
+  /api/runs/{id}/retry:
+    post:
+      tags:
+      - Runs
+      summary: Retry a failed run
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Run retried
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunSummary'
+        '404':
+          description: Not found
+  /api/templates:
+    get:
+      tags:
+      - Templates
+      summary: List quick templates
+      responses:
+        '200':
+          description: Template list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Template'
+  /api/templates/{id}/generate:
+    post:
+      tags:
+      - Templates
+      summary: Generate content from a template
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                variables:
+                  type: object
+                  additionalProperties: true
+                brandId:
+                  type: string
+      responses:
+        '200':
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunSummary'
+        '404':
+          description: Template not found
+  /api/schedules:
+    get:
+      tags:
+      - Schedules
+      summary: List scheduled runs
+      responses:
+        '200':
+          description: Schedule list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Schedule'
+    post:
+      tags:
+      - Schedules
+      summary: Create a schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleInput'
+      responses:
+        '201':
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/schedules/{id}:
+    delete:
+      tags:
+      - Schedules
+      summary: Delete a schedule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Schedule deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '404':
+          description: Not found
+    patch:
+      tags:
+      - Schedules
+      summary: Update a schedule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleInput'
+      responses:
+        '200':
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '404':
+          description: Not found
+  /api/analytics:
+    get:
+      tags:
+      - Analytics
+      summary: Get content analytics
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/variants:
+    post:
+      tags:
+      - Variants
+      summary: Generate content variants
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - content
+              properties:
+                content:
+                  type: string
+                count:
+                  type: integer
+                  default: 3
+                brandId:
+                  type: string
+      responses:
+        '200':
+          description: Variants generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  variants:
+                    type: array
+                    items:
+                      type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/export:
+    get:
+      tags:
+      - Export
+      summary: Export all runs
+      parameters:
+      - name: format
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - json
+          - markdown
+      responses:
+        '200':
+          description: Exported data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+            text/markdown:
+              schema:
+                type: string
+  /api/settings/social/status:
+    get:
+      tags:
+      - Settings
+      summary: Get social account connection status
+      responses:
+        '200':
+          description: Social account statuses
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    connected:
+                      type: boolean
+                    username:
+                      type: string
+  /api/settings/social/{platform}:
+    post:
+      tags:
+      - Settings
+      summary: Save social platform credentials
+      parameters:
+      - name: platform
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - twitter
+          - linkedin
+          - facebook
+          - instagram
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                apiKey:
+                  type: string
+                apiSecret:
+                  type: string
+                accessToken:
+                  type: string
+      responses:
+        '200':
+          description: Credentials saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-
   responses:
     BadRequest:
       description: Bad request
@@ -1036,14 +1387,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-
   schemas:
     Error:
       type: object
       properties:
         error:
           type: string
-
     AuthResponse:
       type: object
       properties:
@@ -1056,7 +1405,6 @@ components:
               type: string
             email:
               type: string
-
     Pipeline:
       type: object
       properties:
@@ -1075,7 +1423,6 @@ components:
                 type: string
               config:
                 type: object
-
     RunSummary:
       type: object
       properties:
@@ -1085,34 +1432,36 @@ components:
           type: string
         status:
           type: string
-          enum: [running, completed, failed, cancelled]
+          enum:
+          - running
+          - completed
+          - failed
+          - cancelled
         createdAt:
           type: string
           format: date-time
-
     Run:
       allOf:
-        - $ref: '#/components/schemas/RunSummary'
-        - type: object
-          properties:
-            output:
+      - $ref: '#/components/schemas/RunSummary'
+      - type: object
+        properties:
+          output:
+            type: object
+            additionalProperties: true
+          steps:
+            type: array
+            items:
               type: object
-              additionalProperties: true
-            steps:
-              type: array
-              items:
-                type: object
-                properties:
-                  name:
-                    type: string
-                  status:
-                    type: string
-                  output:
-                    type: string
-            completedAt:
-              type: string
-              format: date-time
-
+              properties:
+                name:
+                  type: string
+                status:
+                  type: string
+                output:
+                  type: string
+          completedAt:
+            type: string
+            format: date-time
     Brand:
       type: object
       properties:
@@ -1128,10 +1477,10 @@ components:
           type: object
         logoUrl:
           type: string
-
     BrandInput:
       type: object
-      required: [name]
+      required:
+      - name
       properties:
         name:
           type: string
@@ -1143,7 +1492,6 @@ components:
           type: object
         logoUrl:
           type: string
-
     Asset:
       type: object
       properties:
@@ -1160,7 +1508,6 @@ components:
         createdAt:
           type: string
           format: date-time
-
     Skill:
       type: object
       properties:
@@ -1170,7 +1517,6 @@ components:
           type: string
         description:
           type: string
-
     QueuedPost:
       type: object
       properties:
@@ -1185,7 +1531,6 @@ components:
           format: date-time
         status:
           type: string
-
     MCPTool:
       type: object
       properties:
@@ -1195,7 +1540,6 @@ components:
           type: string
         inputSchema:
           type: object
-
     Notification:
       type: object
       properties:
@@ -1210,3 +1554,58 @@ components:
         createdAt:
           type: string
           format: date-time
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+              required:
+                type: boolean
+    Schedule:
+      type: object
+      properties:
+        id:
+          type: string
+        pipelineId:
+          type: string
+        cron:
+          type: string
+        enabled:
+          type: boolean
+        lastRunAt:
+          type: string
+          format: date-time
+        nextRunAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    ScheduleInput:
+      type: object
+      properties:
+        pipelineId:
+          type: string
+        cron:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        input:
+          type: object
+          additionalProperties: true
