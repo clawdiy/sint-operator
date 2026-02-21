@@ -1,76 +1,57 @@
 # Changelog
 
-All notable changes to SINT Marketing Operator are documented here.
-
-## [0.4.0] - 2025-02-20
+## [0.5.0] - 2026-02-21
 
 ### Added
-- **Parallel step execution** — Pipeline steps can now declare `config.parallel: true` with `config.count: N` to run N instances concurrently using Promise.all with a concurrency limit of 5.
-- **Batch processing** — Steps with `config.count: N` (without parallel) execute sequentially N times with indexed inputs; outputs collected into an array.
-- **Pipeline trigger matching** — New `matchPipeline(input)` and `matchAllPipelines(input)` functions match user input against pipeline `trigger.pattern` regex fields. Returns the best-scoring match.
-- **Notifier skill** — New `notifier` skill formats messages from `{{variable}}` templates with channel-specific formatting (Telegram, Slack, Discord, email, webhook). Cost: 1 unit.
-- **Test suite** — Comprehensive vitest test suite:
-  - `pipeline-engine.test.ts` — Pipeline loading, variable resolution, condition evaluation, retry logic, parallel execution, trigger matching
-  - `brand-manager.test.ts` — Brand CRUD, context building, YAML loading, platform config
-  - `skill-registry.test.ts` — Skill registration, matching, progressive disclosure, execution
-- **CHANGELOG.md** — This file.
+- **Dual LLM Support** — Native Anthropic SDK + OpenAI SDK with automatic model routing
+- **Content Preview System** — Platform-specific preview cards (Twitter, LinkedIn, Blog, Calendar)
+- **Social Account Connection** — Guided setup for Twitter OAuth + LinkedIn OAuth in Settings
+- **Visual Pipeline Steps** — Step-by-step flow visualization with live progress
+- **Notification System** — Bell icon with badge, SSE real-time updates, unread count
+- **Onboarding Wizard** — 3-step setup flow for first-time users
+- **SQLite Run Persistence** — Runs survive server restarts
+- **OpenAPI/Swagger** — Full spec at /api/docs with Swagger UI
+- **MCP Skill Server** — All 15 skills exposed as MCP tools
+- **Social Publishing** — Twitter/X + LinkedIn with queue system
+- **Telegram Notifications** — Pipeline completion alerts
+- **2 New Skills** — Newsletter generator, competitor content analyzer
+- **4 Template Brands** — SaaS, E-commerce, B2B, Personal Creator
+- **CI/CD Pipeline** — GitHub Actions (build + test + type check)
+- **Delete Runs** — DELETE /api/runs/:id endpoint
+- **Publish Buttons** — One-click publishing from content preview
+- **Inline Editing** — Edit generated content before publishing
+- **Keyboard Shortcuts** — Cmd+Enter for quick actions
+- **Error Boundary** — Graceful crash handling
 
 ### Changed
-- Pipeline engine upgraded to v3 with parallel/batch support.
-- Orchestrator now registers notifier skill (13 built-in skills total).
-- Orchestrator exposes `matchPipeline()` and `matchAllPipelines()` methods.
-- `resolveInputs`, `resolveValue`, and `evaluateCondition` are now exported for testability.
+- Pipeline runner opens as modal popup (not inline)
+- Brand create/detail views as modal popups
+- Results page: split layout (list left, detail right)
+- Sidebar: expandable with text labels, collapsed with tooltips
+- Friendly pipeline names everywhere ("Content Repurposer" not "content-repurpose")
+- Brand template names shown as descriptive titles
+- "Tokens" → "AI Calls", "CU" → "Credits"
+- Skills page: icons, search, alphabetical sort
+- Auto-navigate to Results after pipeline completion
 
-## [0.3.0] - 2025-02-15
+### Fixed
+- Auth blocking UI when AUTH_ENABLED not set
+- Brand lookup failing in auth-disabled mode
+- Model name format for Anthropic API
+- Dockerfile: build tools for native modules, health check path
+- TSConfig: include onboarding + notifications in build
 
-### Added
-- **Brand Identity Pipeline** — Full brand identity generation: research → colors → typography → logos → mockups → guidelines.
-- **Visual Metadata Pipeline** — Automated visual asset metadata extraction and tagging.
-- **Ad Variations Pipeline** — Generate multiple ad copy/creative variations for A/B testing.
-- **Infographic Pipeline** — Data-driven infographic content generation.
-- **SEO Optimizer skill** — On-page SEO analysis and optimization recommendations.
-- **SERP Scraper skill** — Search engine results page scraping for competitive analysis.
-- **Brand Researcher skill** — Deep brand research including competitor analysis and positioning.
+### Infrastructure
+- Multi-stage Dockerfile with health checks
+- Railway deployment with volume persistence notes
+- Docker Compose for local development
+- Better error logging in Docker builds
 
-### Changed
-- Pipeline YAML schema now supports `config` field on steps for extensible step configuration.
-- Model routing improved with better tier selection heuristics.
-
-## [0.2.0] - 2025-02-01
-
-### Added
-- **Pipeline Engine v2** — Full YAML-based deterministic pipeline execution with step chaining ($ref variables), conditional execution, retry with linear/exponential backoff, model tier routing per step, and audit trail.
-- **Metering system** — SQLite WAL-mode usage tracking with daily/monthly/per-run cost limits and hard stops.
-- **Progressive skill discovery** — Three-level loading system (L1: Discovery ~75 tokens, L2: Activation ~2-5K tokens, L3: Resources on-demand) for context window efficiency.
-- **Brand Context Manager** — Brand profile CRUD with YAML persistence, voice/visual/platform config, and automatic system prompt injection.
-- **12 built-in skills:**
-  - `asset-ingester` — File/URL/text ingestion with metadata extraction
-  - `content-analyzer` — Theme identification, hook extraction, platform suitability scoring
-  - `content-repurpose` — Multi-platform content generation from long-form source
-  - `seo-blog` — SEO-optimized blog article generation
-  - `social-calendar` — Social media content calendar generation
-  - `platform-formatter` — Platform-specific formatting and constraint enforcement
-  - `video-clipper` — Video clip extraction with FFmpeg
-  - `linkedin-writer` — LinkedIn-optimized professional content
-  - `output-packager` — Final deliverable packaging
-  - `brand-researcher` — Brand research and competitive analysis
-  - `serp-scraper` — SERP data collection
-  - `seo-optimizer` — SEO analysis and recommendations
-- **Memory store** — ChromaDB-backed vector memory with semantic search.
-- **LLM Router** — Tiered model routing (complex/routine/fallback) with automatic fallback.
-- **API server** — Express-based REST API for pipeline execution, brand management, and asset operations.
-- **CLI** — Commander-based CLI for pipeline execution and management.
-
-### Changed
-- Full architecture rewrite from v0.1.0 proof-of-concept.
-
-## [0.1.0] - 2025-01-15
+## [0.4.0] - 2026-02-20
 
 ### Added
-- Initial proof-of-concept.
-- Basic content repurposing from text input.
-- Single-model LLM integration.
-- Simple file-based storage.
-- Content Repurpose Pipeline (basic version).
-- Social Calendar Pipeline (basic version).
-- SEO Blog Pipeline (basic version).
+- Initial SINT Marketing Operator
+- 13 skills, 7 pipelines, basic brand system
+- React SPA with dark theme
+- Express API server
+- LLM router (OpenAI only)
