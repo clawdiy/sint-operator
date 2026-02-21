@@ -151,9 +151,18 @@ POST /api/brands                       Create brand
 POST /api/publish                      Publish to single platform
 POST /api/publish/multi                Publish to multiple platforms
 POST /api/publish/queue                Queue for later
+POST /api/publish/process              Process pending queue items now
 GET  /api/publish/queue                List queue
+GET  /api/publish/dead-letter          List permanently failed queue items
+POST /api/publish/retry/:id            Retry a dead-letter queue item
 DELETE /api/publish/queue/:id          Cancel queued item
 GET  /api/publish/status               Platform configuration
+```
+
+### Webhooks
+```
+POST /api/webhooks                     Ingest signed external webhook
+GET  /api/webhooks                     List ingested webhooks (auth required)
 ```
 
 ### MCP (Model Context Protocol)
@@ -206,6 +215,15 @@ JWT_SECRET=
 
 # Server
 PORT=18789
+
+# Publish queue worker (background scheduler)
+PUBLISH_QUEUE_WORKER_ENABLED=true
+PUBLISH_QUEUE_WORKER_INTERVAL_MS=30000
+
+# Webhook auth (choose one mode)
+WEBHOOK_HMAC_SECRET=
+WEBHOOK_HMAC_TOLERANCE_SEC=300
+WEBHOOK_INGEST_SECRET=
 ```
 
 ## Template Brands

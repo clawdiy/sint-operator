@@ -25,7 +25,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
+    const requestId = res.headers.get('x-request-id');
+    const message = err.error || res.statusText;
+    throw new Error(requestId ? `${message} (request ${requestId})` : message);
   }
   return res.json();
 }

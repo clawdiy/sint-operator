@@ -56,6 +56,6 @@ RUN mkdir -p data
 EXPOSE 18789
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD curl -f http://localhost:18789/health || exit 1
+  CMD sh -c 'curl -fsS "http://localhost:${PORT:-18789}/health" || exit 1'
 
 CMD ["node", "dist/index.js"]

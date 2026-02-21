@@ -1,7 +1,8 @@
-import { EventEmitter } from 'events';
 import { Router, type Response } from 'express';
 import { nanoid } from 'nanoid';
+import { join, resolve } from 'path';
 import type { AuthenticatedRequest } from '../auth/auth-middleware.js';
+import { NotificationStore } from '../core/storage/notification-store.js';
 
 export type NotificationType = 'run_completed' | 'run_failed' | 'info' | 'warning';
 
@@ -18,17 +19,46 @@ export type Notification = {
 
 const MAX_NOTIFICATIONS_PER_USER = 100;
 
-const notificationStore = new Map<string, Notification[]>();
 const streamsByUser = new Map<string, Set<Response>>();
-const notificationEvents = new EventEmitter();
-notificationEvents.setMaxListeners(200);
+let notificationStore: NotificationStore | null = null;
+let storeDataDir = resolve(process.env.SINT_DATA_DIR ?? './data');
+let storePath = '';
 
-function getBucket(userId: string): Notification[] {
-  const existing = notificationStore.get(userId);
-  if (existing) return existing;
-  const created: Notification[] = [];
-  notificationStore.set(userId, created);
-  return created;
+function ensureStore(): NotificationStore {
+  if (!notificationStore) {
+    initNotificationStore(storeDataDir);
+  }
+  if (!notificationStore) {
+    throw new Error('Notification store not initialized');
+  }
+  return notificationStore;
+}
+
+export function initNotificationStore(dataDir: string): void {
+  const resolved = resolve(dataDir);
+  const targetPath = join(resolved, 'notifications.db');
+
+  if (notificationStore && storePath === targetPath) {
+    return;
+  }
+
+  if (notificationStore) {
+    notificationStore.close();
+    notificationStore = null;
+  }
+
+  notificationStore = new NotificationStore(targetPath);
+  storeDataDir = resolved;
+  storePath = targetPath;
+}
+
+export function closeNotificationStore(): void {
+  if (notificationStore) {
+    notificationStore.close();
+    notificationStore = null;
+  }
+  storePath = '';
+  storeDataDir = resolve(process.env.SINT_DATA_DIR ?? './data');
 }
 
 function getUserId(req: AuthenticatedRequest): string | null {
@@ -55,6 +85,7 @@ export function addNotification(
   userId: string,
   notification: { type: string; title: string; message: string; runId?: string }
 ): void {
+  const store = ensureStore();
   const item: Notification = {
     id: nanoid(12),
     userId,
@@ -66,36 +97,31 @@ export function addNotification(
     createdAt: new Date().toISOString(),
   };
 
-  const bucket = getBucket(userId);
-  bucket.push(item);
-
-  while (bucket.length > MAX_NOTIFICATIONS_PER_USER) {
-    bucket.shift();
-  }
-
-  notificationEvents.emit(`notification:${userId}`, item);
+  store.save(item);
+  store.trimUserNotifications(userId, MAX_NOTIFICATIONS_PER_USER);
   emitToStreams(userId, item);
 }
 
 export function getNotifications(userId: string, unreadOnly: boolean = false): Notification[] {
-  const bucket = getBucket(userId);
-  const filtered = unreadOnly ? bucket.filter(n => !n.read) : bucket;
-  return [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const store = ensureStore();
+  return store.list({
+    userId,
+    unreadOnly,
+    limit: MAX_NOTIFICATIONS_PER_USER,
+  }) as Notification[];
 }
 
 export function markRead(userId: string, notificationId: string): void {
-  const bucket = getBucket(userId);
-  const item = bucket.find(n => n.id === notificationId);
-  if (item) {
-    item.read = true;
-  }
+  ensureStore().markRead(userId, notificationId);
 }
 
 export function markAllRead(userId: string): void {
-  const bucket = getBucket(userId);
-  bucket.forEach(item => {
-    item.read = true;
-  });
+  ensureStore().markAllRead(userId);
+}
+
+export function __resetNotificationsForTests(): void {
+  closeNotificationStore();
+  streamsByUser.clear();
 }
 
 export function createNotificationsRouter(): Router {

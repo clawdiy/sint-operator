@@ -18,6 +18,7 @@ import { join, dirname, resolve } from 'path';
 import { ScheduleStore } from '../core/storage/schedule-store.js';
 import { RunStore, type AsyncRun } from '../core/storage/run-store.js';
 import { WebhookStore } from '../core/storage/webhook-store.js';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
@@ -37,7 +38,7 @@ import { getUser, initAuthDB, verifyToken } from '../auth/auth-service.js';
 import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '../auth/api-key-service.js';
 import { getSocialCredentials, getSocialStatus, initSocialAccountDB, storeSocialCredentials } from '../auth/social-account-service.js';
 import { createOnboardingRouter } from './onboarding.js';
-import { addNotification, createNotificationsRouter } from './notifications.js';
+import { addNotification, closeNotificationStore, createNotificationsRouter, initNotificationStore } from './notifications.js';
 import { createBrand, getBrand, listBrands, saveBrand } from '../core/brand/manager.js';
 import type { LinkedInCredentials, TwitterCredentials } from '../services/social/types.js';
 import { validateBody } from './validation.js';
@@ -51,6 +52,11 @@ interface RunEvent {
   data: Record<string, unknown>;
   timestamp: string;
 }
+
+type RequestContext = express.Request & {
+  requestId?: string;
+  rawBody?: Buffer;
+};
 
 const runEvents = new EventEmitter();
 runEvents.setMaxListeners(100);
@@ -106,6 +112,14 @@ export function shouldBypassApiAuth(path: string, authEnabled: boolean, method: 
   return false;
 }
 
+export function resolveRequestId(incoming: string | undefined): string {
+  const trimmed = incoming?.trim();
+  if (trimmed && trimmed.length > 0 && trimmed.length <= 128) {
+    return trimmed;
+  }
+  return `req_${nanoid(10)}`;
+}
+
 export function isValidWebhookSharedSecret(
   expectedSecretRaw: string | undefined,
   providedSecretRaw: string | undefined,
@@ -113,6 +127,79 @@ export function isValidWebhookSharedSecret(
   const expectedSecret = expectedSecretRaw?.trim();
   const providedSecret = providedSecretRaw?.trim();
   return !!expectedSecret && !!providedSecret && expectedSecret === providedSecret;
+}
+
+function secureCompareHex(leftHex: string, rightHex: string): boolean {
+  try {
+    const left = Buffer.from(leftHex, 'hex');
+    const right = Buffer.from(rightHex, 'hex');
+    if (left.length === 0 || right.length === 0) return false;
+    if (left.length !== right.length) return false;
+    return timingSafeEqual(left, right);
+  } catch {
+    return false;
+  }
+}
+
+function parseWebhookSignatureCandidates(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(token => token.trim())
+    .map(token => {
+      const equalsIndex = token.indexOf('=');
+      const value = equalsIndex >= 0 ? token.slice(equalsIndex + 1) : token;
+      return value.startsWith('sha256=') ? value.slice('sha256='.length) : value;
+    })
+    .map(value => value.trim())
+    .filter(value => value.length > 0 && /^[a-fA-F0-9]+$/.test(value));
+}
+
+function parseWebhookTimestamp(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const parsed = Number(raw.trim());
+  if (!Number.isFinite(parsed)) return null;
+  // Support both seconds and milliseconds input.
+  return parsed > 1e11 ? Math.floor(parsed / 1000) : Math.floor(parsed);
+}
+
+export function getWebhookHmacToleranceSec(raw: string | undefined): number {
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 300;
+  return Math.max(30, Math.min(parsed, 3600));
+}
+
+export function isValidWebhookHmacSignature(input: {
+  secretRaw: string | undefined;
+  signatureHeaderRaw: string | undefined;
+  timestampHeaderRaw: string | undefined;
+  rawBody: Buffer | undefined;
+  toleranceSec?: number;
+  nowMs?: number;
+}): boolean {
+  const secret = input.secretRaw?.trim();
+  if (!secret) return false;
+
+  const rawBody = input.rawBody;
+  if (!rawBody || rawBody.length === 0) return false;
+
+  const timestamp = parseWebhookTimestamp(input.timestampHeaderRaw);
+  if (!timestamp) return false;
+
+  const toleranceSec = input.toleranceSec ?? 300;
+  const nowSec = Math.floor((input.nowMs ?? Date.now()) / 1000);
+  if (Math.abs(nowSec - timestamp) > toleranceSec) return false;
+
+  const candidates = parseWebhookSignatureCandidates(input.signatureHeaderRaw);
+  if (candidates.length === 0) return false;
+
+  const signedPayload = `${timestamp}.${rawBody.toString('utf8')}`;
+  const expected = createHmac('sha256', secret).update(signedPayload).digest('hex');
+  return candidates.some(candidate => secureCompareHex(candidate.toLowerCase(), expected));
+}
+
+function getRequestId(req: express.Request): string {
+  return (req as RequestContext).requestId ?? 'unknown';
 }
 
 // ─── Rate Limiters ───────────────────────────────────────────
@@ -335,10 +422,30 @@ function resolveWebhookUser(req: express.Request, payloadUserId?: string): { use
     return { userId: 'default', email: 'admin@localhost' };
   }
 
-  const expectedSecret = process.env.WEBHOOK_INGEST_SECRET;
-  const providedSecret = req.header('x-webhook-secret');
-  if (!isValidWebhookSharedSecret(expectedSecret, providedSecret)) {
-    return null;
+  const hmacSecret = process.env.WEBHOOK_HMAC_SECRET;
+  if (hmacSecret?.trim()) {
+    const signatureHeader = req.header('x-webhook-signature')
+      ?? req.header('x-signature')
+      ?? req.header('x-hub-signature-256');
+    const timestampHeader = req.header('x-webhook-timestamp')
+      ?? req.header('x-timestamp');
+    const toleranceSec = getWebhookHmacToleranceSec(process.env.WEBHOOK_HMAC_TOLERANCE_SEC);
+    const isValid = isValidWebhookHmacSignature({
+      secretRaw: hmacSecret,
+      signatureHeaderRaw: signatureHeader,
+      timestampHeaderRaw: timestampHeader,
+      rawBody: (req as RequestContext).rawBody,
+      toleranceSec,
+    });
+    if (!isValid) {
+      return null;
+    }
+  } else {
+    const expectedSecret = process.env.WEBHOOK_INGEST_SECRET;
+    const providedSecret = req.header('x-webhook-secret');
+    if (!isValidWebhookSharedSecret(expectedSecret, providedSecret)) {
+      return null;
+    }
   }
 
   const targetUserId = payloadUserId?.trim() || req.header('x-user-id')?.trim();
@@ -539,6 +646,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   initAuthDB(dataDir);
   initApiKeyDB(dataDir);
   initSocialAccountDB(dataDir);
+  initNotificationStore(dataDir);
   initPublishQueueStore(dataDir);
 
   const publishWorkerEnabled = getPublishWorkerEnabled(process.env.PUBLISH_QUEUE_WORKER_ENABLED);
@@ -582,6 +690,13 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     next();
   });
 
+  app.use((req, res, next) => {
+    const requestId = resolveRequestId(req.header('x-request-id'));
+    (req as RequestContext).requestId = requestId;
+    res.setHeader('x-request-id', requestId);
+    next();
+  });
+
   // ─── CORS ─────────────────────────────────────────────────
   app.use(cors({
     origin: [
@@ -592,19 +707,59 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       /\.vercel\.app$/,
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Webhook-Secret', 'X-User-Id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-Webhook-Secret',
+      'X-Webhook-Signature',
+      'X-Webhook-Timestamp',
+      'X-User-Id',
+      'X-Request-Id',
+    ],
     credentials: true,
   }));
 
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({
+    limit: '50mb',
+    verify: (req, _res, buf) => {
+      (req as RequestContext).rawBody = Buffer.from(buf);
+    },
+  }));
 
-  // ─── Request Timing ─────────────────────────────────────
-  app.use((req, res, next) => {
-    const start = Date.now();
+  app.use('/api', (req, res, next) => {
+    const startedAt = Date.now();
+    const requestId = getRequestId(req);
     res.on('finish', () => {
-      const duration = Date.now() - start;
-      if (duration > 5000) {
-        logger.warn('Slow request', { method: req.method, path: req.path, duration, status: res.statusCode });
+      const durationMs = Date.now() - startedAt;
+      const userId = (req as AuthenticatedRequest).user?.userId ?? null;
+      const payload = {
+        event: 'api_request',
+        requestId,
+        method: req.method,
+        path: req.originalUrl,
+        status: res.statusCode,
+        durationMs,
+        userId,
+      };
+
+      if (res.statusCode >= 500) {
+        logger.error('API request', payload);
+      } else if (res.statusCode >= 400) {
+        logger.warn('API request', payload);
+      } else {
+        logger.info('API request', payload);
+      }
+
+      if (durationMs > 5000) {
+        logger.warn('Slow request', {
+          requestId,
+          method: req.method,
+          path: req.originalUrl,
+          durationMs,
+          status: res.statusCode,
+          userId,
+        });
       }
     });
     next();
@@ -962,11 +1117,19 @@ app.get('/health', (_req, res) => {
   app.use('/api/notifications', createNotificationsRouter());
 
   app.post('/api/webhooks', (req, res) => {
+    const requestId = getRequestId(req);
     try {
       const payload = webhookPayloadSchema.parse(req.body ?? {});
       const user = resolveWebhookUser(req, payload.userId);
       if (!user) {
-        res.status(401).json({ error: 'Unauthorized webhook request' });
+        console.warn(JSON.stringify({
+          level: 'warn',
+          event: 'webhook_unauthorized',
+          requestId,
+          source: payload.source,
+          webhookEvent: payload.event,
+        }));
+        res.status(401).json({ error: 'Unauthorized webhook request', requestId });
         return;
       }
 
@@ -982,6 +1145,15 @@ app.get('/health', (_req, res) => {
       };
 
       storeWebhookEvent(event);
+      console.log(JSON.stringify({
+        level: 'info',
+        event: 'webhook_ingested',
+        requestId,
+        source: event.source,
+        webhookEvent: event.event,
+        userId: event.userId,
+        runId: event.runId ?? null,
+      }));
       addNotification(user.userId, {
         type: 'info',
         title: `Webhook: ${payload.event}`,
@@ -993,13 +1165,20 @@ app.get('/health', (_req, res) => {
         success: true,
         id: event.id,
         receivedAt: event.receivedAt,
+        requestId,
       });
     } catch (error) {
       if (error instanceof ZodError) {
-        res.status(400).json({ error: error.issues[0]?.message ?? 'Invalid webhook payload' });
+        res.status(400).json({ error: error.issues[0]?.message ?? 'Invalid webhook payload', requestId });
         return;
       }
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error(JSON.stringify({
+        level: 'error',
+        event: 'webhook_ingest_failed',
+        requestId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }));
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error', requestId });
     }
   });
 
@@ -1704,8 +1883,8 @@ app.get('/health', (_req, res) => {
 
   // ─── Start ──────────────────────────────────────────────
 
-  const server = app.listen(port, () => {
-    logger.info('SINT Marketing Operator API started', { port, url: `http://localhost:${port}` });
+  const server = app.listen(port, '0.0.0.0', () => {
+    logger.info('SINT Marketing Operator API started', { port, url: `http://0.0.0.0:${port}` });
     logger.info('Routes registered', { publishWorker: publishWorkerEnabled, publishWorkerIntervalMs });
   });
 
@@ -1715,6 +1894,7 @@ app.get('/health', (_req, res) => {
       publishWorkerTimer = null;
     }
     closePublishQueueStore();
+    closeNotificationStore();
     runStore.close();
     webhookStore.close();
   });

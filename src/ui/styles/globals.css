@@ -549,6 +549,59 @@ body {
   margin-bottom: 24px;
 }
 
+.dead-letter-card {
+  margin-bottom: 24px;
+  border-color: rgba(255, 59, 92, 0.28);
+  background: linear-gradient(180deg, rgba(255, 59, 92, 0.08), rgba(255, 59, 92, 0.02));
+}
+
+.dead-letter-empty {
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 8px 2px 2px;
+}
+
+.dead-letter-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dead-letter-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid rgba(255, 59, 92, 0.25);
+  background: rgba(14, 14, 18, 0.45);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.dead-letter-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dead-letter-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dead-letter-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.dead-letter-error {
+  font-size: 12px;
+  color: #ff9aaa;
+  word-break: break-word;
+}
+
 .live-activity-header {
   display: flex;
   justify-content: space-between;
@@ -830,6 +883,15 @@ body {
 
 .btn.danger:hover {
   background: rgba(255, 59, 92, 0.1);
+}
+
+.btn.warning {
+  border-color: rgba(255, 184, 0, 0.35);
+  color: var(--warning);
+}
+
+.btn.warning:hover {
+  background: rgba(255, 184, 0, 0.1);
 }
 
 .btn.small {

@@ -8,6 +8,8 @@ import {
   generateBlog,
   generateCalendar,
   cancelRun,
+  getDeadLetterQueue,
+  retryDeadLetterItem,
   normalizeRunPayload,
   isAsyncRunStart,
   isRunInProgress,
@@ -75,6 +77,9 @@ export default function Dashboard({ onNavigate }: Props) {
   const [refreshingRuns, setRefreshingRuns] = useState(false);
   const [cancelingRunId, setCancelingRunId] = useState('');
   const [streamSteps, setStreamSteps] = useState<any[]>([]);
+  const [deadLetterItems, setDeadLetterItems] = useState<any[]>([]);
+  const [deadLetterLoading, setDeadLetterLoading] = useState(false);
+  const [retryingDeadLetterId, setRetryingDeadLetterId] = useState('');
 
   const loadData = useCallback(() => {
     Promise.all([
@@ -82,13 +87,16 @@ export default function Dashboard({ onNavigate }: Props) {
       getRuns().catch((e: any) => { addToast('error', e.message || 'Failed to load runs'); return []; }),
       getUsage(1).catch(() => null),
       getBrands().catch((e: any) => { addToast('error', e.message || 'Failed to load brands'); return []; }),
-    ]).then(([h, r, u, b]) => {
+      getDeadLetterQueue({ limit: 8 }).catch(() => ({ items: [] })),
+    ]).then(([h, r, u, b, deadLetterResult]) => {
       setHealth(h);
       const normalizedRuns = Array.isArray(r) ? sortRunsByStartedAt(r.map(normalizeRunPayload)) : [];
       setRuns(normalizedRuns);
       setUsage(u);
       const brandArr = Array.isArray(b) ? b : [];
       setBrands(brandArr);
+      const deadLetterPayload = deadLetterResult as { items?: any[] } | undefined;
+      setDeadLetterItems(Array.isArray(deadLetterPayload?.items) ? deadLetterPayload?.items ?? [] : []);
       if (brandArr.length > 0) {
         const first = brandArr[0].id;
         setRepurposeBrand(prev => prev || first);
@@ -117,6 +125,18 @@ export default function Dashboard({ onNavigate }: Props) {
       setRefreshingRuns(false);
     }
   }, []);
+
+  const refreshDeadLetter = useCallback(async () => {
+    setDeadLetterLoading(true);
+    try {
+      const result = await getDeadLetterQueue({ limit: 8 });
+      setDeadLetterItems(Array.isArray(result?.items) ? result.items : []);
+    } catch (error: any) {
+      addToast('error', error?.message || 'Failed to load dead-letter queue');
+    } finally {
+      setDeadLetterLoading(false);
+    }
+  }, [addToast]);
 
   useEffect(() => {
     if (inProgressRuns.length === 0) return;
@@ -232,6 +252,19 @@ export default function Dashboard({ onNavigate }: Props) {
       addToast('error', err.message || 'Failed to cancel run');
     } finally {
       setCancelingRunId('');
+    }
+  };
+
+  const handleRetryDeadLetter = async (id: string) => {
+    setRetryingDeadLetterId(id);
+    try {
+      await retryDeadLetterItem(id);
+      addToast('success', 'Dead-letter item re-queued for retry');
+      await refreshDeadLetter();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to retry queue item');
+    } finally {
+      setRetryingDeadLetterId('');
     }
   };
 
@@ -356,6 +389,41 @@ export default function Dashboard({ onNavigate }: Props) {
           </div>
         </div>
       )}
+
+      <div className="card dead-letter-card">
+        <div className="live-activity-header">
+          <h3 style={{ margin: 0 }}>Dead-letter Queue</h3>
+          <button className="btn small" onClick={() => void refreshDeadLetter()} disabled={deadLetterLoading}>
+            {deadLetterLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+        {deadLetterItems.length === 0 ? (
+          <div className="dead-letter-empty">No failed publish jobs. Queue health is clean.</div>
+        ) : (
+          <div className="dead-letter-list">
+            {deadLetterItems.map(item => (
+              <div key={item.id} className="dead-letter-item">
+                <div className="dead-letter-main">
+                  <div className="dead-letter-title">
+                    {item.request?.platform ?? 'platform'} • {item.brandId}
+                  </div>
+                  <div className="dead-letter-meta">
+                    attempts: {item.attemptCount} • {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : 'unknown time'}
+                  </div>
+                  <div className="dead-letter-error">{item.lastError || item.result?.error || 'Unknown publish error'}</div>
+                </div>
+                <button
+                  className="btn warning small"
+                  onClick={() => void handleRetryDeadLetter(item.id)}
+                  disabled={retryingDeadLetterId === item.id}
+                >
+                  {retryingDeadLetterId === item.id ? 'Retrying…' : 'Retry'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Quick Actions */}
       <div className="quick-actions">

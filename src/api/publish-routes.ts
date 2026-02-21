@@ -28,15 +28,38 @@ import {
 import type { AuthenticatedRequest } from '../auth/auth-middleware.js';
 import { getSocialCredentials } from '../auth/social-account-service.js';
 
-const logger = {
-  info: (msg: string, meta?: Record<string, unknown>) => console.log(`[publish] ${msg}`, meta ?? ''),
-  warn: (msg: string, meta?: Record<string, unknown>) => console.warn(`[publish] ${msg}`, meta ?? ''),
-  error: (msg: string, meta?: Record<string, unknown>) => console.error(`[publish] ${msg}`, meta ?? ''),
-  debug: (msg: string, meta?: Record<string, unknown>) => console.debug(`[publish] ${msg}`, meta ?? ''),
-};
-
 export function createPublishRoutes(): Router {
   const router = Router();
+
+  function getRequestId(req: AuthenticatedRequest): string {
+    const fromResponse = req.res?.getHeader('x-request-id');
+    if (typeof fromResponse === 'string' && fromResponse.trim()) return fromResponse.trim();
+    const fromRequest = req.header?.('x-request-id');
+    if (typeof fromRequest === 'string' && fromRequest.trim()) return fromRequest.trim();
+    return 'unknown';
+  }
+
+  function makeRouteLogger(req: AuthenticatedRequest, userId?: string) {
+    const base = {
+      requestId: getRequestId(req),
+      method: req.method,
+      path: req.originalUrl,
+      userId: userId ?? null,
+      source: 'publish_routes',
+    };
+
+    return {
+      info: (msg: string, meta?: Record<string, unknown>) => console.log(JSON.stringify({ level: 'info', message: msg, ...base, ...(meta ?? {}) })),
+      warn: (msg: string, meta?: Record<string, unknown>) => console.warn(JSON.stringify({ level: 'warn', message: msg, ...base, ...(meta ?? {}) })),
+      error: (msg: string, meta?: Record<string, unknown>) => console.error(JSON.stringify({ level: 'error', message: msg, ...base, ...(meta ?? {}) })),
+      debug: (msg: string, meta?: Record<string, unknown>) => console.debug(JSON.stringify({ level: 'debug', message: msg, ...base, ...(meta ?? {}) })),
+    };
+  }
+
+  function errorResponse(req: AuthenticatedRequest, res: any, statusCode: number, message: string) {
+    const requestId = getRequestId(req);
+    res.status(statusCode).json({ error: message, requestId });
+  }
 
   function getRequestUserId(req: AuthenticatedRequest): string | null {
     if (process.env.AUTH_ENABLED !== 'true') return 'default';
@@ -54,13 +77,14 @@ export function createPublishRoutes(): Router {
     try {
       const userId = getRequestUserId(req as AuthenticatedRequest);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
+        errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
         return;
       }
+      const logger = makeRouteLogger(req as AuthenticatedRequest, userId);
 
       const { platform, content, hashtags, media, articleUrl, articleTitle, articleDescription, isThread } = req.body;
       if (!platform || !content) {
-        return res.status(400).json({ error: 'platform and content are required' });
+        return errorResponse(req as AuthenticatedRequest, res, 400, 'platform and content are required');
       }
 
       const request: PublishRequest = {
@@ -71,9 +95,9 @@ export function createPublishRoutes(): Router {
         userId,
         credentials: getSocialCredentials(userId),
       });
-      res.json(result);
+      res.json({ ...result, requestId: getRequestId(req as AuthenticatedRequest) });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(req as AuthenticatedRequest, res, 500, String(err));
     }
   });
 
@@ -82,22 +106,27 @@ export function createPublishRoutes(): Router {
     try {
       const userId = getRequestUserId(req as AuthenticatedRequest);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
+        errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
         return;
       }
+      const logger = makeRouteLogger(req as AuthenticatedRequest, userId);
 
       const { requests } = req.body;
       if (!Array.isArray(requests) || requests.length === 0) {
-        return res.status(400).json({ error: 'requests array is required' });
+        return errorResponse(req as AuthenticatedRequest, res, 400, 'requests array is required');
       }
 
       const results = await publishMulti(requests, logger, {
         userId,
         credentials: getSocialCredentials(userId),
       });
-      res.json({ results, summary: { total: results.length, success: results.filter(r => r.success).length } });
+      res.json({
+        results,
+        summary: { total: results.length, success: results.filter(r => r.success).length },
+        requestId: getRequestId(req as AuthenticatedRequest),
+      });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(req as AuthenticatedRequest, res, 500, String(err));
     }
   });
 
@@ -106,19 +135,19 @@ export function createPublishRoutes(): Router {
     try {
       const userId = getRequestUserId(req as AuthenticatedRequest);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
+        errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
         return;
       }
 
       const { request, brandId, runId, scheduledAt } = req.body;
       if (!request?.platform || !request?.content || !brandId) {
-        return res.status(400).json({ error: 'request (with platform, content) and brandId are required' });
+        return errorResponse(req as AuthenticatedRequest, res, 400, 'request (with platform, content) and brandId are required');
       }
 
       const item = queuePublish(request, userId, brandId, runId, scheduledAt);
-      res.status(201).json(item);
+      res.status(201).json({ ...item, requestId: getRequestId(req as AuthenticatedRequest) });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(req as AuthenticatedRequest, res, 500, String(err));
     }
   });
 
@@ -127,18 +156,19 @@ export function createPublishRoutes(): Router {
     try {
       const userId = getRequestUserId(req as AuthenticatedRequest);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
+        errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
         return;
       }
+      const logger = makeRouteLogger(req as AuthenticatedRequest, userId);
 
       const results = await processQueue({
         logger,
         userId,
         resolveCredentials: id => getSocialCredentials(id),
       });
-      res.json({ processed: results.length, results });
+      res.json({ processed: results.length, results, requestId: getRequestId(req as AuthenticatedRequest) });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(req as AuthenticatedRequest, res, 500, String(err));
     }
   });
 
@@ -147,7 +177,7 @@ export function createPublishRoutes(): Router {
     try {
       const userId = getRequestUserId(req as AuthenticatedRequest);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
+        errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
         return;
       }
 
@@ -158,9 +188,9 @@ export function createPublishRoutes(): Router {
         brandId: brandId as string | undefined,
         limit: parseLimit(req.query.limit, 100),
       });
-      res.json({ items, total: items.length });
+      res.json({ items, total: items.length, requestId: getRequestId(req as AuthenticatedRequest) });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(req as AuthenticatedRequest, res, 500, String(err));
     }
   });
 
@@ -168,7 +198,7 @@ export function createPublishRoutes(): Router {
     try {
       const userId = getRequestUserId(req as AuthenticatedRequest);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
+        errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
         return;
       }
 
@@ -179,9 +209,9 @@ export function createPublishRoutes(): Router {
         brandId: brandId as string | undefined,
         limit: parseLimit(req.query.limit, 100),
       });
-      res.json({ items, total: items.length });
+      res.json({ items, total: items.length, requestId: getRequestId(req as AuthenticatedRequest) });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(req as AuthenticatedRequest, res, 500, String(err));
     }
   });
 
@@ -189,18 +219,18 @@ export function createPublishRoutes(): Router {
     try {
       const userId = getRequestUserId(req as AuthenticatedRequest);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
+        errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
         return;
       }
 
       const item = retryQueueItem(req.params.id, userId);
       if (!item) {
-        res.status(404).json({ error: 'Failed queue item not found' });
+        errorResponse(req as AuthenticatedRequest, res, 404, 'Failed queue item not found');
         return;
       }
-      res.json({ retried: true, item });
+      res.json({ retried: true, item, requestId: getRequestId(req as AuthenticatedRequest) });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(req as AuthenticatedRequest, res, 500, String(err));
     }
   });
 
@@ -209,18 +239,18 @@ export function createPublishRoutes(): Router {
     try {
       const userId = getRequestUserId(req as AuthenticatedRequest);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
+        errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
         return;
       }
 
       const success = cancelQueueItem(req.params.id, userId);
       if (success) {
-        res.json({ cancelled: true });
+        res.json({ cancelled: true, requestId: getRequestId(req as AuthenticatedRequest) });
       } else {
-        res.status(404).json({ error: 'Item not found or already processed' });
+        errorResponse(req as AuthenticatedRequest, res, 404, 'Item not found or already processed');
       }
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(req as AuthenticatedRequest, res, 500, String(err));
     }
   });
 
@@ -228,15 +258,16 @@ export function createPublishRoutes(): Router {
   router.get('/status', async (req, res) => {
     const userId = getRequestUserId(req as AuthenticatedRequest);
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
+      errorResponse(req as AuthenticatedRequest, res, 401, 'Unauthorized');
       return;
     }
 
     const credentials = getSocialCredentials(userId);
     const configured = getConfiguredPlatforms(credentials);
     const verify = req.query.verify === 'true';
+    const logger = makeRouteLogger(req as AuthenticatedRequest, userId);
     const verified = verify ? await verifyAllTokens(logger, credentials) : undefined;
-    res.json({ platforms: configured, verified });
+    res.json({ platforms: configured, verified, requestId: getRequestId(req as AuthenticatedRequest) });
   });
 
   return router;

@@ -1,8 +1,18 @@
 import { join } from 'path';
 import { mkdirSync, rmSync } from 'fs';
+import { createHmac } from 'crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { __resetAuthForTests, initAuthDB, signup } from '../src/auth/auth-service.js';
-import { getPublishWorkerIntervalMs, getRateLimitKey, isValidWebhookSharedSecret, rewriteVersionedPath, shouldBypassApiAuth } from '../src/api/server.js';
+import {
+  getPublishWorkerIntervalMs,
+  getRateLimitKey,
+  getWebhookHmacToleranceSec,
+  isValidWebhookHmacSignature,
+  isValidWebhookSharedSecret,
+  resolveRequestId,
+  rewriteVersionedPath,
+  shouldBypassApiAuth,
+} from '../src/api/server.js';
 
 const TEST_ROOT = join(import.meta.dirname ?? '.', '__server_test_tmp__');
 
@@ -92,5 +102,54 @@ describe('server routing and rate-limit helpers', () => {
     expect(isValidWebhookSharedSecret('top-secret', 'bad-secret')).toBe(false);
     expect(isValidWebhookSharedSecret(undefined, 'top-secret')).toBe(false);
     expect(isValidWebhookSharedSecret('top-secret', undefined)).toBe(false);
+  });
+
+  it('resolves request ids from header or generates fallback', () => {
+    expect(resolveRequestId('my-request-id')).toBe('my-request-id');
+    expect(resolveRequestId('  external-id  ')).toBe('external-id');
+    expect(resolveRequestId('')).toMatch(/^req_/);
+    expect(resolveRequestId(undefined)).toMatch(/^req_/);
+  });
+
+  it('normalizes webhook hmac tolerance bounds', () => {
+    expect(getWebhookHmacToleranceSec(undefined)).toBe(300);
+    expect(getWebhookHmacToleranceSec('5')).toBe(30);
+    expect(getWebhookHmacToleranceSec('999999')).toBe(3600);
+    expect(getWebhookHmacToleranceSec('900')).toBe(900);
+  });
+
+  it('validates webhook HMAC signatures', () => {
+    const payload = Buffer.from(JSON.stringify({ source: 'zapier', event: 'pipeline.completed' }), 'utf8');
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signedPayload = `${timestamp}.${payload.toString('utf8')}`;
+    const secret = 'super-secret';
+    const signature = createHmac('sha256', secret).update(signedPayload).digest('hex');
+
+    expect(isValidWebhookHmacSignature({
+      secretRaw: secret,
+      signatureHeaderRaw: `sha256=${signature}`,
+      timestampHeaderRaw: String(timestamp),
+      rawBody: payload,
+      toleranceSec: 300,
+      nowMs: timestamp * 1000,
+    })).toBe(true);
+
+    expect(isValidWebhookHmacSignature({
+      secretRaw: secret,
+      signatureHeaderRaw: 'sha256=deadbeef',
+      timestampHeaderRaw: String(timestamp),
+      rawBody: payload,
+      toleranceSec: 300,
+      nowMs: timestamp * 1000,
+    })).toBe(false);
+
+    expect(isValidWebhookHmacSignature({
+      secretRaw: secret,
+      signatureHeaderRaw: `sha256=${signature}`,
+      timestampHeaderRaw: String(timestamp - 1000),
+      rawBody: payload,
+      toleranceSec: 60,
+      nowMs: timestamp * 1000,
+    })).toBe(false);
   });
 });
