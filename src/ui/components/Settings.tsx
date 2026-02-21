@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../api';
 import { useToast } from './Toast';
 
 interface ApiKeyState {
@@ -8,10 +9,15 @@ interface ApiKeyState {
   value: string;
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('sint_auth_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function SystemInfo() {
   const [info, setInfo] = React.useState<any>(null);
   React.useEffect(() => {
-    fetch('/health').then(r => r.json()).then(setInfo).catch(() => {});
+    fetch(`${API_BASE}/health`).then(r => r.json()).then(setInfo).catch(() => {});
   }, []);
   return (
     <>
@@ -38,7 +44,7 @@ export default function Settings() {
 
   useEffect(() => {
     // Load current key status
-    fetch('/api/settings/api-key')
+    fetch(`${API_BASE}/api/settings/api-key`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.masked) setOpenai(prev => ({ ...prev, masked: data.masked, loading: false }));
@@ -46,7 +52,7 @@ export default function Settings() {
       })
       .catch(() => setOpenai(prev => ({ ...prev, loading: false })));
 
-    fetch('/api/settings/anthropic-key')
+    fetch(`${API_BASE}/api/settings/anthropic-key`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.masked) setAnthropic(prev => ({ ...prev, masked: data.masked, loading: false }));
@@ -58,7 +64,9 @@ export default function Settings() {
   const saveKey = async (provider: 'openai' | 'anthropic') => {
     const state = provider === 'openai' ? openai : anthropic;
     const setState = provider === 'openai' ? setOpenai : setAnthropic;
-    const endpoint = provider === 'openai' ? '/api/settings/api-key' : '/api/settings/anthropic-key';
+    const endpoint = provider === 'openai'
+      ? `${API_BASE}/api/settings/api-key`
+      : `${API_BASE}/api/settings/anthropic-key`;
     const keyValue = state.value.trim();
 
     if (!keyValue) return;
@@ -66,7 +74,7 @@ export default function Settings() {
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ apiKey: keyValue }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to save');

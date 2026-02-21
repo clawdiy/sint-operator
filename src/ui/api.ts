@@ -1,4 +1,5 @@
-const BASE = '';
+export const API_BASE = '/v1';
+const BASE = API_BASE;
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('sint_auth_token');
@@ -236,7 +237,9 @@ export function streamRun(runId: string, handlers: {
   onComplete?: (result: any) => void;
   onError?: (error: string) => void;
 }): () => void {
-  const source = new EventSource(`/api/runs/${runId}/stream`);
+  const token = localStorage.getItem('sint_auth_token');
+  const query = token ? `?token=${encodeURIComponent(token)}` : '';
+  const source = new EventSource(`${BASE}/api/runs/${runId}/stream${query}`);
   source.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'step_start' || data.type === 'step_complete') handlers.onStep?.(data);

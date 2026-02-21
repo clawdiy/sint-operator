@@ -22,14 +22,15 @@ import { EventEmitter } from 'events';
 import cors from 'cors';
 import multer from 'multer';
 import { ZodError, z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { nanoid } from 'nanoid';
 import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
 import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
 import { notifyPipelineComplete, isTelegramConfigured } from '../skills/notifier/telegram.js';
 import { createAuthRouter } from '../auth/auth-routes.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/auth-middleware.js';
-import { initAuthDB } from '../auth/auth-service.js';
+import { getUser, initAuthDB, verifyToken } from '../auth/auth-service.js';
 import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '../auth/api-key-service.js';
 import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, createNotificationsRouter } from './notifications.js';
@@ -51,11 +52,52 @@ export function emitRunEvent(event: RunEvent): void {
   runEvents.emit(`run:${event.runId}`, event);
 }
 
+export function rewriteVersionedPath(url: string): string {
+  if (url === '/v1/api' || url.startsWith('/v1/api/') || url.startsWith('/v1/api?')) {
+    return url.replace(/^\/v1/, '');
+  }
+  if (url === '/v1/health' || url.startsWith('/v1/health?')) {
+    return url.replace(/^\/v1\/health/, '/health');
+  }
+  return url;
+}
+
+function parseBearerToken(header: string | undefined): string | null {
+  if (!header) return null;
+  const [scheme, token] = header.split(' ');
+  if (!scheme || !token || scheme.toLowerCase() !== 'bearer') {
+    return null;
+  }
+  return token.trim() || null;
+}
+
+function resolveUserIdFromRequest(req: express.Request): string | null {
+  const authenticated = (req as AuthenticatedRequest).user?.userId;
+  if (authenticated) return authenticated;
+
+  const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : '';
+  const token = parseBearerToken(req.header('Authorization')) ?? (queryToken || null);
+  if (!token) return null;
+
+  try {
+    return verifyToken(token).userId;
+  } catch {
+    return null;
+  }
+}
+
+export function getRateLimitKey(req: express.Request): string {
+  const userId = resolveUserIdFromRequest(req);
+  if (userId) return `user:${userId}`;
+  return `ip:${ipKeyGenerator(req.ip ?? '127.0.0.1')}`;
+}
+
 // ─── Rate Limiters ───────────────────────────────────────────
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
+  keyGenerator: (req) => getRateLimitKey(req),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -64,6 +106,7 @@ const generalLimiter = rateLimit({
 const pipelineLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
+  keyGenerator: (req) => getRateLimitKey(req),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many pipeline requests, please try again later.' },
@@ -74,6 +117,20 @@ const pipelineLimiter = rateLimit({
 
 let runStore: RunStore;
 const ASYNC_RUN_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+interface IngestedWebhookEvent {
+  id: string;
+  userId: string;
+  source: string;
+  event: string;
+  brandId?: string;
+  runId?: string;
+  data?: Record<string, unknown>;
+  receivedAt: string;
+}
+
+const webhooksByUser = new Map<string, IngestedWebhookEvent[]>();
+const MAX_WEBHOOK_EVENTS_PER_USER = 100;
 
 function generateRunId(): string {
   return `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -149,8 +206,60 @@ function brandUserId(user: { userId: string }): string | undefined {
   return process.env.AUTH_ENABLED === 'true' ? user.userId : undefined;
 }
 
+function resolveWebhookUser(req: express.Request, payloadUserId?: string): { userId: string; email: string } | null {
+  const direct = (req as AuthenticatedRequest).user;
+  if (direct?.userId) return direct;
+
+  const bearer = parseBearerToken(req.header('Authorization'));
+  if (bearer) {
+    try {
+      return verifyToken(bearer);
+    } catch {}
+  }
+
+  if (process.env.AUTH_ENABLED !== 'true') {
+    return { userId: 'default', email: 'admin@localhost' };
+  }
+
+  const expectedSecret = process.env.WEBHOOK_INGEST_SECRET?.trim();
+  const providedSecret = req.header('x-webhook-secret')?.trim();
+  if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
+    return null;
+  }
+
+  const targetUserId = payloadUserId?.trim() || req.header('x-user-id')?.trim();
+  if (!targetUserId) {
+    return null;
+  }
+
+  const targetUser = getUser(targetUserId);
+  if (!targetUser) {
+    return null;
+  }
+
+  return { userId: targetUser.id, email: targetUser.email };
+}
+
+function storeWebhookEvent(event: IngestedWebhookEvent): void {
+  const bucket = webhooksByUser.get(event.userId) ?? [];
+  bucket.push(event);
+  while (bucket.length > MAX_WEBHOOK_EVENTS_PER_USER) {
+    bucket.shift();
+  }
+  webhooksByUser.set(event.userId, bucket);
+}
+
 const apiKeySchema = z.object({
   apiKey: z.string().trim().min(1),
+});
+
+const webhookPayloadSchema = z.object({
+  source: z.string().trim().min(1).max(100).default('external'),
+  event: z.string().trim().min(1).max(100),
+  runId: z.string().trim().min(1).optional(),
+  brandId: z.string().trim().min(1).optional(),
+  userId: z.string().trim().min(1).optional(),
+  data: z.record(z.unknown()).optional(),
 });
 
 const brandSchema = z.object({
@@ -274,6 +383,14 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   initAuthDB(dataDir);
   initApiKeyDB(dataDir);
 
+  app.use((req, _res, next) => {
+    const rewritten = rewriteVersionedPath(req.url);
+    if (rewritten !== req.url) {
+      req.url = rewritten;
+    }
+    next();
+  });
+
   // ─── CORS ─────────────────────────────────────────────────
   app.use(cors({
     origin: [
@@ -284,7 +401,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       /\.vercel\.app$/,
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Webhook-Secret', 'X-User-Id'],
     credentials: true,
   }));
 
@@ -364,7 +481,12 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // Protect all /api routes (only when AUTH_ENABLED=true)
   app.use('/api', (req, res, next) => {
-    if (process.env.AUTH_ENABLED !== 'true' || req.path === '/test-llm' || req.path.startsWith('/auth')) {
+    if (
+      process.env.AUTH_ENABLED !== 'true'
+      || req.path === '/test-llm'
+      || req.path.startsWith('/auth')
+      || req.path.startsWith('/webhooks')
+    ) {
       next();
       return;
     }
@@ -375,6 +497,48 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   app.use('/api/onboarding', createOnboardingRouter({ brandsDir }));
   app.use('/api/notifications', createNotificationsRouter());
+
+  app.post('/api/webhooks', (req, res) => {
+    try {
+      const payload = webhookPayloadSchema.parse(req.body ?? {});
+      const user = resolveWebhookUser(req, payload.userId);
+      if (!user) {
+        res.status(401).json({ error: 'Unauthorized webhook request' });
+        return;
+      }
+
+      const event: IngestedWebhookEvent = {
+        id: nanoid(12),
+        userId: user.userId,
+        source: payload.source,
+        event: payload.event,
+        brandId: payload.brandId,
+        runId: payload.runId,
+        data: payload.data,
+        receivedAt: new Date().toISOString(),
+      };
+
+      storeWebhookEvent(event);
+      addNotification(user.userId, {
+        type: 'info',
+        title: `Webhook: ${payload.event}`,
+        message: `${payload.source} webhook received`,
+        runId: payload.runId,
+      });
+
+      res.status(202).json({
+        success: true,
+        id: event.id,
+        receivedAt: event.receivedAt,
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: error.issues[0]?.message ?? 'Invalid webhook payload' });
+        return;
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
 
   app.post('/api/settings/api-key', (req, res) => {
     try {

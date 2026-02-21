@@ -17,9 +17,16 @@ function parseBearerToken(header: string | undefined): string | null {
   return token.trim() || null;
 }
 
+function parseQueryToken(req: Request): string | null {
+  const token = req.query?.token;
+  if (typeof token !== 'string') return null;
+  const trimmed = token.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   try {
-    const token = parseBearerToken(req.header('Authorization'));
+    const token = parseBearerToken(req.header('Authorization')) ?? parseQueryToken(req);
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
       return;

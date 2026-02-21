@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api';
+import { API_BASE, getNotifications, markNotificationRead, markAllNotificationsRead } from '../api';
 
 interface Notification {
   id: string;
@@ -45,15 +45,16 @@ export default function NotificationBell() {
   useEffect(() => {
     let source: EventSource;
     try {
-      source = new EventSource('/api/notifications/stream');
-      source.onmessage = (event) => {
+      const token = localStorage.getItem('sint_auth_token');
+      const query = token ? `?token=${encodeURIComponent(token)}` : '';
+      source = new EventSource(`${API_BASE}/api/notifications/stream${query}`);
+      const handleNotification = (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'notification') {
-            setNotifications(prev => [data.data, ...prev]);
-          }
+          setNotifications(prev => [data, ...prev]);
         } catch {}
       };
+      source.addEventListener('notification', handleNotification);
       source.onerror = () => { source.close(); };
     } catch {}
     return () => { source?.close(); };

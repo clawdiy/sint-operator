@@ -33,3 +33,29 @@ jobs:
         run: |
           npm run ui:build
           test -f src/ui/dist/index.html || (echo "UI build missing index.html" && exit 1)
+
+  deploy-railway:
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ] || [ -z "$RAILWAY_SERVICE" ]; then
+            echo "Missing RAILWAY_TOKEN or RAILWAY_SERVICE repository secrets."
+            exit 1
+          fi
+          railway up --service "$RAILWAY_SERVICE" --detach
