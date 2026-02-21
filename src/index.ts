@@ -20,9 +20,9 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
 
 // Model routing configuration
 const MODELS: ModelConfig = {
-  complex: process.env.SINT_MODEL_COMPLEX ?? 'claude-opus-4-6',
-  routine: process.env.SINT_MODEL_ROUTINE ?? 'claude-sonnet-4-5',
-  fallback: process.env.SINT_MODEL_FALLBACK ?? 'kimi-k2.5',
+  complex: process.env.SINT_MODEL_COMPLEX ?? 'claude-sonnet-4-5-20250514',
+  routine: process.env.SINT_MODEL_ROUTINE ?? 'claude-haiku-3-5-20241022',
+  fallback: process.env.SINT_MODEL_FALLBACK ?? 'claude-haiku-3-5-20241022',
 };
 
 if (!OPENAI_API_KEY && !ANTHROPIC_API_KEY) {

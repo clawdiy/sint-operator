@@ -23,11 +23,13 @@ import type {
 
 // Cost units per 1K tokens (approximate relative costs)
 const COST_RATES: Record<string, number> = {
-  'claude-opus-4-6':     15.0,
-  'claude-sonnet-4-5':    3.0,
-  'kimi-k2.5':            0.5,
-  'gpt-4o':               5.0,
-  'gpt-4o-mini':          0.3,
+  'claude-opus':     15.0,
+  'claude-sonnet':    3.0,
+  'claude-haiku':     0.25,
+  'kimi':             0.5,
+  'gpt-4o-mini':      0.3,
+  'gpt-4o':           5.0,
+  'gpt-4':            10.0,
 };
 
 // Task patterns for automatic routing
@@ -772,33 +774,37 @@ export class LLMRouterImpl implements LLMRouter {
       return { ok: true, mode: 'dry-run' };
     }
 
-    try {
-      const timeout = createTimeoutSignal(15_000);
-      try {
-        const response = await this.client.chat.completions.create(
-          {
-            model: this.models.routine,
-            messages: [{ role: 'user', content: 'Say "ok"' }],
-            max_tokens: 5,
-          },
-          { signal: timeout.signal }
-        );
-        timeout.clear();
+    const model = this.models.routine;
 
-        return {
-          ok: true,
-          mode: 'live',
-          model: response.model,
-        };
-      } finally {
-        timeout.clear();
+    try {
+      if (this.isAnthropicModel(model) && this.hasAnthropicClient()) {
+        const timeout = createTimeoutSignal(15_000);
+        try {
+          const response = await this.anthropicClient!.messages.create({
+            model,
+            max_tokens: 5,
+            messages: [{ role: 'user', content: 'Say "ok"' }],
+          });
+          timeout.clear();
+          return { ok: true, mode: 'live', model: response.model };
+        } finally {
+          timeout.clear();
+        }
+      } else {
+        const timeout = createTimeoutSignal(15_000);
+        try {
+          const response = await this.client.chat.completions.create(
+            { model, messages: [{ role: 'user', content: 'Say "ok"' }], max_tokens: 5 },
+            { signal: timeout.signal }
+          );
+          timeout.clear();
+          return { ok: true, mode: 'live', model: response.model };
+        } finally {
+          timeout.clear();
+        }
       }
     } catch (err) {
-      return {
-        ok: false,
-        mode: 'error',
-        error: formatError(err),
-      };
+      return { ok: false, mode: 'error', error: formatError(err) };
     }
   }
 
