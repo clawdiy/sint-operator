@@ -147,7 +147,7 @@ export default function Dashboard({ onNavigate }: Props) {
         setStreamSteps([]);
         streamRun(started.runId, {
           onStep: (step) => setStreamSteps(prev => [...prev, step]),
-          onComplete: () => { addToast('success', 'Repurpose completed!'); loadData(); },
+          onComplete: () => { addToast('success', '✅ Repurpose completed! Check Results to view.'); loadData(); onNavigate('results'); },
           onError: (err) => addToast('error', err),
         });
       } else {
@@ -176,7 +176,7 @@ export default function Dashboard({ onNavigate }: Props) {
         setStreamSteps([]);
         streamRun(started.runId, {
           onStep: (step) => setStreamSteps(prev => [...prev, step]),
-          onComplete: () => { addToast('success', 'Blog generated!'); loadData(); },
+          onComplete: () => { addToast('success', '✅ Blog generated! Check Results to view.'); loadData(); onNavigate('results'); },
           onError: (err) => addToast('error', err),
         });
       } else {
@@ -206,7 +206,7 @@ export default function Dashboard({ onNavigate }: Props) {
         setStreamSteps([]);
         streamRun(started.runId, {
           onStep: (step) => setStreamSteps(prev => [...prev, step]),
-          onComplete: () => { addToast('success', 'Calendar generated!'); loadData(); },
+          onComplete: () => { addToast('success', '✅ Calendar generated! Check Results to view.'); loadData(); onNavigate('results'); },
           onError: (err) => addToast('error', err),
         });
       } else {
