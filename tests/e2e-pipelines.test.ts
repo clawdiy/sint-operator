@@ -26,13 +26,17 @@ beforeAll(() => {
 });
 
 describe('Pipeline Definitions', () => {
-  it('loads pipeline YAMLs from config', () => {
+  it('loads all 7 pipeline YAMLs from config', () => {
     const pipelines = listPipelines();
-    expect(pipelines.length).toBeGreaterThanOrEqual(3);
+    expect(pipelines.length).toBe(7);
     const ids = pipelines.map(p => p.id);
     expect(ids).toContain('content-repurpose');
     expect(ids).toContain('seo-blog');
     expect(ids).toContain('social-calendar');
+    expect(ids).toContain('ad-variations');
+    expect(ids).toContain('brand-identity');
+    expect(ids).toContain('infographic');
+    expect(ids).toContain('visual-metadata');
   });
 
   it('content-repurpose pipeline references existing skills', () => {
@@ -61,12 +65,48 @@ describe('Pipeline Definitions', () => {
       expect(skill).toBeDefined();
     }
   });
+
+  it('ad-variations pipeline references existing skills', () => {
+    const pipeline = getPipeline('ad-variations');
+    expect(pipeline).toBeDefined();
+    for (const step of pipeline!.steps) {
+      const skill = getSkill(step.skill);
+      expect(skill, `Skill "${step.skill}" not found for ad-variations pipeline`).toBeDefined();
+    }
+  });
+
+  it('brand-identity pipeline references existing skills', () => {
+    const pipeline = getPipeline('brand-identity');
+    expect(pipeline).toBeDefined();
+    for (const step of pipeline!.steps) {
+      const skill = getSkill(step.skill);
+      expect(skill, `Skill "${step.skill}" not found for brand-identity pipeline`).toBeDefined();
+    }
+  });
+
+  it('infographic pipeline references existing skills', () => {
+    const pipeline = getPipeline('infographic');
+    expect(pipeline).toBeDefined();
+    for (const step of pipeline!.steps) {
+      const skill = getSkill(step.skill);
+      expect(skill, `Skill "${step.skill}" not found for infographic pipeline`).toBeDefined();
+    }
+  });
+
+  it('visual-metadata pipeline references existing skills', () => {
+    const pipeline = getPipeline('visual-metadata');
+    expect(pipeline).toBeDefined();
+    for (const step of pipeline!.steps) {
+      const skill = getSkill(step.skill);
+      expect(skill, `Skill "${step.skill}" not found for visual-metadata pipeline`).toBeDefined();
+    }
+  });
 });
 
 describe('Skill Registry', () => {
-  it('has all 13 built-in skills registered', () => {
+  it('has all 15 built-in skills registered', () => {
     const skills = orchestrator.listSkills();
-    expect(skills.length).toBeGreaterThanOrEqual(13);
+    expect(skills.length).toBeGreaterThanOrEqual(15);
   });
 
   it('core skills are resolvable', () => {

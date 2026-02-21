@@ -1,20 +1,16 @@
 id: ad-variations
 name: Ad Variations Pipeline
-description: "Analyze product photo → generate headline and layout variations at scale"
-version: "2.0"
+description: "Analyze product/campaign context → generate headline and copy variations for ads"
+version: "3.0"
 
 trigger:
-  type: asset_upload
+  type: command
   pattern: "ad.*variations|create.*ads|generate.*ads|ad.*creatives"
-  accept:
-    - image/jpeg
-    - image/png
-    - image/webp
 
 inputs:
-  - name: product_photo
-    type: file
-    description: "Product or hero image to base ads on"
+  - name: product_description
+    type: string
+    description: "Description of the product or service to advertise"
     required: true
   - name: brand_profile
     type: reference
@@ -26,70 +22,47 @@ inputs:
     default: conversion
   - name: target_platforms
     type: array
-    description: "Ad platforms and placements"
-    default: [instagram_feed, instagram_stories, facebook_feed, tiktok]
+    description: "Ad platforms to generate copy for"
+    default: [instagram, facebook, linkedin, twitter]
 
 steps:
-  - id: analyze_photo
-    skill: image-analyzer
+  - id: analyze
+    skill: content-analyzer
     modelTier: routine
     action: >
-      Analyze the product photo: identify product, colors, composition,
-      mood, and key visual elements. Extract dominant colors and suggest
-      complementary ad backgrounds and overlays.
+      Analyze the product description and brand context. Identify key selling
+      points, target audience pain points, emotional triggers, and competitive
+      differentiators. Extract messaging angles for ad copy.
     inputs:
-      product_photo: "${inputs.product_photo}"
+      content: "${inputs.product_description}"
       brand_profile: "${inputs.brand_profile}"
-    output: photo_analysis
+      platforms: "${inputs.target_platforms}"
+    retry:
+      max: 2
+      backoff: exponential
+    output: analysis
 
-  - id: generate_headlines
-    skill: copywriter
+  - id: generate_variations
+    skill: content-repurpose
     modelTier: complex
     action: >
-      Generate 10 headline variations across different angles:
-      benefit-driven, curiosity, social proof, urgency, emotional,
-      and problem-solution. Each with a supporting subheadline and CTA.
+      Using the analysis, generate 10 ad copy variations across different angles:
+      benefit-driven, curiosity, social proof, urgency, emotional, and
+      problem-solution. Each variation should include a headline, body copy,
+      and CTA optimized for the target platforms. Format for ${inputs.campaign_goal}.
     inputs:
-      photo_analysis: "$photo_analysis"
-      brand_profile: "${inputs.brand_profile}"
-      campaign_goal: "${inputs.campaign_goal}"
-    count: 10
-    output: headlines
-
-  - id: generate_layouts
-    skill: ad-layout-generator
-    modelTier: complex
-    action: >
-      Generate 10 distinct ad layout variations combining the product
-      photo with headlines. Vary composition, text placement, background
-      treatment, and visual hierarchy. Output sized for each target platform.
-    inputs:
-      photo_analysis: "$photo_analysis"
-      headlines: "$headlines"
-      brand_profile: "${inputs.brand_profile}"
+      content: "$analysis"
       target_platforms: "${inputs.target_platforms}"
-    count: 10
-    parallel: true
-    output: layouts
-
-  - id: package
-    skill: asset-packager
-    modelTier: routine
-    action: >
-      Package all ad variations with naming conventions, platform specs,
-      and a preview sheet. Include recommended A/B test groupings.
-    inputs:
-      layouts: "$layouts"
-      headlines: "$headlines"
-      photo_analysis: "$photo_analysis"
-      target_platforms: "${inputs.target_platforms}"
-    output: ad_package
+      brand_profile: "${inputs.brand_profile}"
+    retry:
+      max: 2
+      backoff: exponential
+    output: ad_variations
 
 outputs:
-  - format: ad_creative_package
+  - format: ad_copy_package
     includes:
-      - layout_previews
-      - headline_matrix
-      - platform_sized_assets
-      - ab_test_recommendations
-      - asset_naming_map
+      - headline_variations
+      - body_copy_variations
+      - cta_options
+      - platform_adaptations

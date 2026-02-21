@@ -1,68 +1,44 @@
 id: visual-metadata
 name: Visual Metadata Pipeline
-description: "Batch analyze images → generate SEO and accessibility metadata → export"
-version: "2.0"
+description: "Analyze visual content → generate SEO and accessibility metadata"
+version: "3.0"
 
 trigger:
-  type: asset_upload
+  type: command
   pattern: "metadata|alt.*text|tag.*images|describe.*images"
-  accept:
-    - image/jpeg
-    - image/png
-    - image/webp
-    - image/gif
 
 inputs:
-  - name: images
-    type: array
-    description: "Batch of images to process"
+  - name: content_description
+    type: string
+    description: "Description of the visual content to generate metadata for"
     required: true
   - name: brand_profile
     type: reference
     description: "Brand context for terminology and tone"
     default: active_brand
-  - name: output_format
-    type: string
-    description: "Export format (json, csv, cms)"
-    default: json
+  - name: platforms
+    type: array
+    description: "Target platforms for metadata optimization"
+    default: [website, instagram, twitter, linkedin]
 
 steps:
-  - id: batch_analyze
-    skill: image-analyzer
+  - id: analyze_and_tag
+    skill: content-analyzer
     modelTier: routine
     action: >
-      Analyze each image in the batch: detect objects, scenes, colors,
-      text, faces, emotions, and composition. Classify content type
-      (product, lifestyle, infographic, portrait, etc.).
+      Analyze the visual content description and generate comprehensive
+      SEO and accessibility metadata: alt text (WCAG compliant),
+      title tags, captions, long descriptions, relevant keywords/tags,
+      OpenGraph descriptions, Twitter Card descriptions, and
+      platform-specific hashtag suggestions.
     inputs:
-      images: "${inputs.images}"
+      content: "${inputs.content_description}"
       brand_profile: "${inputs.brand_profile}"
-    parallel: true
-    output: analysis_results
-
-  - id: generate_metadata
-    skill: metadata-writer
-    modelTier: routine
-    action: >
-      For each image generate: SEO-optimized alt text, title tag,
-      caption, long description, relevant keywords/tags, and
-      OpenGraph/Twitter Card descriptions. Ensure WCAG accessibility
-      compliance for all alt text.
-    inputs:
-      analysis_results: "$analysis_results"
-      brand_profile: "${inputs.brand_profile}"
-    output: metadata_set
-
-  - id: export
-    skill: content-exporter
-    modelTier: routine
-    action: >
-      Export metadata in the requested format. Include image filename
-      mapping and bulk-import ready structure for common CMS platforms.
-    inputs:
-      metadata_set: "$metadata_set"
-      output_format: "${inputs.output_format}"
-    output: export_package
+      platforms: "${inputs.platforms}"
+    retry:
+      max: 2
+      backoff: exponential
+    output: metadata
 
 outputs:
   - format: metadata_export
@@ -72,4 +48,4 @@ outputs:
       - captions
       - keyword_tags
       - opengraph_descriptions
-      - cms_import_file
+      - platform_hashtags

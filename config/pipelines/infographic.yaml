@@ -1,7 +1,7 @@
 id: infographic
 name: Infographic Pipeline
-description: "Extract data → suggest visual metaphors → generate infographic → export"
-version: "2.0"
+description: "Analyze data → generate structured infographic content with visual direction"
+version: "3.0"
 
 trigger:
   type: command
@@ -10,7 +10,7 @@ trigger:
 inputs:
   - name: data_source
     type: string
-    description: "Raw data, URL, or description of data to visualize"
+    description: "Raw data, statistics, or description of data to visualize"
     required: true
   - name: brand_profile
     type: reference
@@ -20,71 +20,49 @@ inputs:
     type: string
     description: "Infographic style (statistical, timeline, process, comparison, geographic)"
     default: auto
-  - name: dimensions
-    type: string
-    description: "Output dimensions"
-    default: "1080x1920"
 
 steps:
-  - id: extract_data
-    skill: data-extractor
-    modelTier: routine
-    action: >
-      Parse and structure the raw data source. Extract key metrics,
-      relationships, hierarchies, and trends. Clean and normalize
-      data points for visualization readiness.
-    inputs:
-      data_source: "${inputs.data_source}"
-    output: structured_data
-
-  - id: suggest_metaphor
-    skill: creative-director
+  - id: analyze_data
+    skill: content-analyzer
     modelTier: complex
     action: >
-      Suggest 3 visual metaphor approaches for presenting the data.
-      Consider the data type, audience, and brand personality.
-      Recommend layout structure, icon systems, and narrative flow.
+      Parse and analyze the raw data source. Extract key metrics,
+      relationships, hierarchies, and trends. Identify the most
+      compelling data points and suggest visual metaphors, layout
+      structure, narrative flow, and section breakdown for an
+      infographic in ${inputs.style} style.
     inputs:
-      structured_data: "$structured_data"
+      content: "${inputs.data_source}"
       brand_profile: "${inputs.brand_profile}"
-      style: "${inputs.style}"
-    output: creative_direction
-
-  - id: generate
-    skill: infographic-designer
-    modelTier: complex
-    action: >
-      Generate the infographic using the selected visual metaphor.
-      Apply brand colors, typography, and iconography. Ensure data
-      accuracy, visual hierarchy, and readability at target dimensions.
-    inputs:
-      structured_data: "$structured_data"
-      creative_direction: "$creative_direction"
-      brand_profile: "${inputs.brand_profile}"
-      dimensions: "${inputs.dimensions}"
     retry:
       max: 2
       backoff: exponential
-    output: infographic_draft
+    output: data_analysis
 
-  - id: export
-    skill: content-exporter
-    modelTier: routine
+  - id: generate_content
+    skill: content-repurpose
+    modelTier: complex
     action: >
-      Export the final infographic in multiple formats (PNG, SVG, PDF).
-      Include an editable source file and individual section exports
-      for social media cropping.
+      Transform the data analysis into structured infographic content.
+      Generate section headings, data callouts, supporting text,
+      icon descriptions, chart specifications, and visual hierarchy
+      notes. Include alt text for accessibility. Output should be
+      a complete content brief that a designer can execute.
     inputs:
-      infographic_draft: "$infographic_draft"
-      dimensions: "${inputs.dimensions}"
-    output: export_package
+      content: "$data_analysis"
+      target_platforms: ["infographic"]
+      brand_profile: "${inputs.brand_profile}"
+    retry:
+      max: 2
+      backoff: exponential
+    output: infographic_content
 
 outputs:
-  - format: infographic_package
+  - format: infographic_brief
     includes:
-      - infographic_png
-      - infographic_svg
-      - infographic_pdf
-      - section_crops
-      - editable_source
-      - data_citations
+      - section_content
+      - data_callouts
+      - chart_specifications
+      - visual_hierarchy
+      - alt_text
+      - design_notes

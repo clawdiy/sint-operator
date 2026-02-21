@@ -1,7 +1,7 @@
 id: brand-identity
 name: Brand Identity Pipeline
-description: "Research → complete brand identity system with colors, typography, logos, and mockups"
-version: "2.0"
+description: "Research industry → generate comprehensive brand identity guidelines"
+version: "3.0"
 
 trigger:
   type: command
@@ -33,87 +33,25 @@ steps:
       Research the industry landscape, competitor branding, target audience
       preferences, and current design trends. Develop brand positioning
       strategy, personality archetypes, and visual direction recommendations.
+      Include color palette suggestions, typography recommendations,
+      logo direction, and complete brand identity guidelines with
+      do's and don'ts, voice and tone, and visual style guide.
     inputs:
       brand_name: "${inputs.brand_name}"
       industry: "${inputs.industry}"
       description: "${inputs.description}"
       style_preferences: "${inputs.style_preferences}"
-    output: brand_research
-
-  - id: color_palette
-    skill: color-designer
-    modelTier: complex
-    action: >
-      Generate a complete color palette: primary, secondary, accent,
-      neutral, and semantic colors. Include hex codes, RGB, HSL values,
-      contrast ratios, and accessibility compliance (WCAG AA/AAA).
-    inputs:
-      brand_research: "$brand_research"
-      brand_name: "${inputs.brand_name}"
-    output: color_system
-
-  - id: typography
-    skill: typography-designer
-    modelTier: complex
-    action: >
-      Select and pair typefaces for headings, body, and accent use.
-      Define type scale, line heights, letter spacing, and font weights.
-      Include web-safe fallbacks and Google Fonts alternatives.
-    inputs:
-      brand_research: "$brand_research"
-      color_system: "$color_system"
-    output: type_system
-
-  - id: logo_concepts
-    skill: logo-designer
-    modelTier: complex
-    action: >
-      Generate 3-5 logo concept directions with rationale.
-      Include primary logo, icon mark, wordmark, and monogram variants.
-      Provide usage guidelines for each concept.
-    inputs:
-      brand_research: "$brand_research"
-      color_system: "$color_system"
-      type_system: "$type_system"
-      brand_name: "${inputs.brand_name}"
-    output: logo_concepts
-
-  - id: mockups
-    skill: mockup-generator
-    modelTier: complex
-    action: >
-      Create brand application mockups: business cards, social media
-      templates, email signature, letterhead, and website hero section.
-      Apply the selected identity system consistently.
-    inputs:
-      logo_concepts: "$logo_concepts"
-      color_system: "$color_system"
-      type_system: "$type_system"
-      brand_research: "$brand_research"
-    output: mockup_set
-
-  - id: compile
-    skill: brand-compiler
-    modelTier: routine
-    action: >
-      Compile all brand identity assets into a comprehensive brand
-      guidelines document. Include do's and don'ts, spacing rules,
-      minimum sizes, and file format specifications.
-    inputs:
-      brand_research: "$brand_research"
-      color_system: "$color_system"
-      type_system: "$type_system"
-      logo_concepts: "$logo_concepts"
-      mockup_set: "$mockup_set"
-      brand_name: "${inputs.brand_name}"
-    output: brand_guidelines
+    retry:
+      max: 2
+      backoff: exponential
+    output: brand_identity
 
 outputs:
   - format: brand_package
     includes:
-      - brand_guidelines_pdf
+      - brand_positioning
       - color_palette
       - typography_spec
-      - logo_files
-      - mockup_previews
-      - asset_inventory
+      - logo_direction
+      - voice_and_tone
+      - visual_style_guide
