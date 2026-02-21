@@ -35,6 +35,20 @@ function sortRunsByStartedAt(runs: any[]): any[] {
   return [...runs].sort((a, b) => Date.parse(b.startedAt ?? '') - Date.parse(a.startedAt ?? ''));
 }
 
+
+const PIPELINE_NAMES: Record<string, string> = {
+  'content-repurpose': 'Content Repurposer',
+  'seo-blog': 'SEO Blog Writer', 
+  'social-calendar': 'Content Calendar',
+  'brand-identity': 'Brand Identity',
+  'ad-variations': 'Ad Variations',
+  'visual-metadata': 'Visual Metadata',
+  'infographic': 'Infographic Creator',
+};
+function friendlyPipeline(id: string): string {
+  return PIPELINE_NAMES[id] || id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function Dashboard({ onNavigate }: Props) {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -313,7 +327,7 @@ export default function Dashboard({ onNavigate }: Props) {
                 <div className="run-item-left">
                   <div className="run-item-icon">{getPipelineIcon(run.pipelineId)}</div>
                   <div className="run-item-info">
-                    <span className="run-item-name">{run.pipelineId}</span>
+                    <span className="run-item-name">{friendlyPipeline(run.pipelineId)}</span>
                     <span className="run-item-meta">
                       {run.brandId} • {new Date(run.startedAt).toLocaleTimeString()}
                     </span>
@@ -486,7 +500,7 @@ export default function Dashboard({ onNavigate }: Props) {
                 <div className="run-item-left">
                   <div className="run-item-icon">{getPipelineIcon(run.pipelineId)}</div>
                   <div className="run-item-info">
-                    <span className="run-item-name">{run.pipelineId}</span>
+                    <span className="run-item-name">{friendlyPipeline(run.pipelineId)}</span>
                     <span className="run-item-meta">{run.brandId} • {new Date(run.startedAt).toLocaleString()}</span>
                   </div>
                 </div>

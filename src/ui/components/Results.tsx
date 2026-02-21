@@ -4,6 +4,20 @@ import { useToast } from './Toast';
 import Spinner from './Spinner';
 import ContentPreview from './ContentPreview';
 
+const PIPELINE_NAMES: Record<string, string> = {
+  'content-repurpose': 'Content Repurposer',
+  'seo-blog': 'SEO Blog Writer',
+  'social-calendar': 'Content Calendar',
+  'brand-identity': 'Brand Identity',
+  'ad-variations': 'Ad Variations',
+  'visual-metadata': 'Visual Metadata',
+  'infographic': 'Infographic Creator',
+};
+function friendlyPipeline(id: string): string {
+  return PIPELINE_NAMES[id] || id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+
 const PLATFORM_ICONS: Record<string, string> = {
   twitter: '𝕏', linkedin: '💼', instagram: '📸', facebook: '👥',
   threads: '🧵', tiktok: '🎵', blog: '📝', email: '✉️',
@@ -261,7 +275,7 @@ export default function Results() {
                 <li key={r.id} className={`pipeline-item ${selected?.id === r.id ? 'active' : ''}`} onClick={() => viewRun(r.id)}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                     <div>
-                      <strong>{r.pipelineId}</strong>
+                      <strong>{friendlyPipeline(r.pipelineId)}</strong>
                       <span className="pipeline-desc">
                         <span className={`badge badge-${r.status}`}><span className="badge-dot" />{r.status}</span>
                         {' '}{new Date(r.startedAt).toLocaleString()}
@@ -280,7 +294,7 @@ export default function Results() {
           {selected ? (
             <>
               <div className="live-activity-header" style={{ marginBottom: '10px' }}>
-                <h3 style={{ margin: 0 }}>{selected.pipelineId || 'Run'} — {new Date(selected.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, {new Date(selected.startedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</h3>
+                <h3 style={{ margin: 0 }}>{friendlyPipeline(selected.pipelineId) || 'Run'} — {new Date(selected.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, {new Date(selected.startedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</h3>
                 {isRunInProgress(selected.status) && (
                   <button className="btn danger small" onClick={handleCancelSelectedRun} disabled={canceling}>
                     {canceling ? 'Canceling…' : 'Cancel Run'}
@@ -288,7 +302,7 @@ export default function Results() {
                 )}
               </div>
               <div className="meta-row">
-                <span>Pipeline: <strong>{selected.pipelineId}</strong></span>
+                <span>Pipeline: <strong>{friendlyPipeline(selected.pipelineId)}</strong></span>
                 <span>Brand: <strong>{selected.brandId}</strong></span>
                 <span>Status: <span className={`badge badge-${selected.status}`}><span className="badge-dot" />{selected.status}</span></span>
               </div>

@@ -25,7 +25,7 @@ export default function Layout({ currentPage, onNavigate, children }: Props) {
     if (typeof window === 'undefined') return false;
     const stored = localStorage.getItem('sint_sidebar_collapsed');
     if (stored !== null) return stored === 'true';
-    return window.innerWidth < 768;
+    return window.innerWidth < 900;
   });
 
   const toggleSidebar = () => {
