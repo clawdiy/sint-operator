@@ -9,7 +9,9 @@ RUN npm install
 COPY . .
 RUN npx tsc
 RUN npm run ui:build || true
-RUN cp -r src/ui/dist dist/ui-static 2>/dev/null || true
+# Ensure ui-static exists even if Vite build fails
+RUN mkdir -p dist/ui-static && \
+    (cp -r src/ui/dist/* dist/ui-static/ 2>/dev/null || true)
 
 # ─── Stage 2: Production ─────────────────────────────────────
 FROM node:22-slim
@@ -28,7 +30,6 @@ COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/src/ui/dist ./dist/ui-static
 COPY config ./config
 COPY docs ./docs
 
