@@ -1,4 +1,4 @@
-const BASE = '';
+const BASE = '/v1';
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('sint_auth_token');

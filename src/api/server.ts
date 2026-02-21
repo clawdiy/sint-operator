@@ -18,17 +18,18 @@ import { join, dirname, resolve } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
+import { timingSafeEqual } from 'crypto';
 import cors from 'cors';
 import multer from 'multer';
 import { ZodError, z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
 import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
 import { notifyPipelineComplete, isTelegramConfigured } from '../skills/notifier/telegram.js';
 import { createAuthRouter } from '../auth/auth-routes.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/auth-middleware.js';
-import { initAuthDB } from '../auth/auth-service.js';
+import { initAuthDB, verifyToken } from '../auth/auth-service.js';
 import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '../auth/api-key-service.js';
 import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, createNotificationsRouter } from './notifications.js';
@@ -53,9 +54,35 @@ export function emitRunEvent(event: RunEvent): void {
 
 // ─── Rate Limiters ───────────────────────────────────────────
 
+function getBearerToken(req: express.Request): string | null {
+  const auth = req.header('authorization');
+  if (!auth || !auth.startsWith('Bearer ')) return null;
+  const token = auth.slice('Bearer '.length).trim();
+  return token.length > 0 ? token : null;
+}
+
+function getRateLimitKey(req: express.Request): string {
+  const token = getBearerToken(req);
+  if (token) {
+    try {
+      const payload = verifyToken(token);
+      if (payload.userId) return `user:${payload.userId}`;
+    } catch {
+      // Invalid tokens should still be rate limited by IP.
+    }
+  }
+
+  const reqUser = (req as AuthenticatedRequest).user?.userId;
+  if (reqUser) return `user:${reqUser}`;
+
+  const ipKey = ipKeyGenerator(req.ip || req.socket.remoteAddress || '127.0.0.1');
+  return `ip:${ipKey}`;
+}
+
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
+  keyGenerator: getRateLimitKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -64,6 +91,7 @@ const generalLimiter = rateLimit({
 const pipelineLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
+  keyGenerator: getRateLimitKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many pipeline requests, please try again later.' },
@@ -86,6 +114,19 @@ interface AsyncRun {
 const asyncRuns = new Map<string, AsyncRun>();
 const ASYNC_RUN_RETENTION_MS = 24 * 60 * 60 * 1000;
 const ASYNC_RUN_MAX_ENTRIES = 500;
+
+interface WebhookEventRecord {
+  id: string;
+  userId: string;
+  source: string;
+  event: string;
+  brandId?: string;
+  payload: Record<string, unknown>;
+  receivedAt: string;
+}
+
+const webhookEventsByUser = new Map<string, WebhookEventRecord[]>();
+const MAX_WEBHOOK_EVENTS_PER_USER = 200;
 
 function generateRunId(): string {
   return `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -115,6 +156,15 @@ function parseStringQuery(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function addWebhookEvent(record: WebhookEventRecord): void {
+  const bucket = webhookEventsByUser.get(record.userId) ?? [];
+  bucket.push(record);
+  while (bucket.length > MAX_WEBHOOK_EVENTS_PER_USER) {
+    bucket.shift();
+  }
+  webhookEventsByUser.set(record.userId, bucket);
 }
 
 function cleanupAsyncRuns(nowTs: number = Date.now()): void {
@@ -206,6 +256,23 @@ const brandSchema = z.object({
   keywords: z.array(z.string()),
   competitors: z.array(z.string()),
 });
+
+const webhookSchema = z.object({
+  event: z.string().trim().min(1, 'event is required'),
+  source: z.string().trim().min(1).default('external'),
+  userId: z.string().trim().min(1).optional(),
+  brandId: z.string().trim().min(1).optional(),
+  payload: z.record(z.unknown()).default({}),
+});
+
+function matchesWebhookSecret(headerSecret: string | undefined): boolean {
+  const expected = process.env.WEBHOOK_INGEST_SECRET;
+  if (!expected || !headerSecret) return false;
+  const a = Buffer.from(headerSecret);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 function enqueueAsyncRun(
   pipelineId: string,
@@ -316,13 +383,25 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   }));
 
   app.use(express.json({ limit: '50mb' }));
+
+  // API versioning compatibility:
+  // - /v1/api/* -> /api/*
+  // - /v1/health -> /health
+  app.use((req, _res, next) => {
+    if (req.url === '/v1/api' || req.url.startsWith('/v1/api/')) {
+      req.url = req.url.replace(/^\/v1\/api/, '/api');
+    } else if (req.url === '/v1/health' || req.url.startsWith('/v1/health?')) {
+      req.url = req.url.replace(/^\/v1/, '');
+    }
+    next();
+  });
   
+  // Rate limiting
+  app.use('/api/', generalLimiter);
+
   // ─── Publish Routes ──────────────────────────────────────
   app.use("/api/publish", createPublishRoutes());
   app.use("/mcp", createMCPRoutes(orchestrator));
-
-  // Rate limiting
-  app.use('/api/', generalLimiter);
 
   // File upload — use SINT_DATA_DIR for uploads
   const uploadDir = join(process.env.SINT_DATA_DIR ?? './data', 'uploads');
@@ -374,7 +453,12 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // Protect all /api routes (only when AUTH_ENABLED=true)
   app.use('/api', (req, res, next) => {
-    if (process.env.AUTH_ENABLED !== 'true' || req.path === '/test-llm' || req.path.startsWith('/auth')) {
+    if (
+      process.env.AUTH_ENABLED !== 'true'
+      || req.path === '/test-llm'
+      || req.path.startsWith('/auth')
+      || req.path.startsWith('/webhooks')
+    ) {
       next();
       return;
     }
@@ -385,6 +469,58 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   app.use('/api/onboarding', createOnboardingRouter({ brandsDir }));
   app.use('/api/notifications', createNotificationsRouter());
+
+  app.post('/api/webhooks', (req, res) => {
+    try {
+      const parsed = webhookSchema.parse(req.body ?? {});
+      const authenticatedUser = (req as AuthenticatedRequest).user?.userId;
+      const secretAccepted = matchesWebhookSecret(req.header('x-webhook-secret') ?? undefined);
+
+      let targetUserId = authenticatedUser;
+      if (!targetUserId && secretAccepted) {
+        targetUserId = parsed.userId ?? (process.env.AUTH_ENABLED === 'true' ? undefined : 'default');
+      }
+
+      if (!targetUserId) {
+        return res.status(401).json({
+          error: 'Unauthorized. Provide Bearer token or x-webhook-secret (+ userId when auth enabled).',
+        });
+      }
+
+      if (parsed.brandId && !getBrand(parsed.brandId, process.env.AUTH_ENABLED === 'true' ? targetUserId : undefined)) {
+        return res.status(404).json({ error: 'Brand not found' });
+      }
+
+      const record: WebhookEventRecord = {
+        id: `wh_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        userId: targetUserId,
+        source: parsed.source,
+        event: parsed.event,
+        brandId: parsed.brandId,
+        payload: parsed.payload,
+        receivedAt: new Date().toISOString(),
+      };
+
+      addWebhookEvent(record);
+      addNotification(targetUserId, {
+        type: 'info',
+        title: 'Webhook received',
+        message: `${record.source}:${record.event}`,
+      });
+
+      res.status(202).json({
+        status: 'accepted',
+        id: record.id,
+        userId: record.userId,
+        receivedAt: record.receivedAt,
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ error: error.issues[0]?.message ?? 'Invalid webhook payload' });
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
 
   app.post('/api/settings/api-key', (req, res) => {
     try {
@@ -889,8 +1025,10 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   const server = app.listen(port, () => {
     console.log(`\n🚀 SINT Marketing Operator API — http://localhost:${port}`);
     console.log(`   Health:    GET  /health`);
+    console.log(`   Versioned: /v1/api/* -> /api/*`);
     console.log(`   Test LLM:  POST /api/test-llm`);
     console.log(`   Auth:      POST /api/auth/signup | /api/auth/login`);
+    console.log(`   Webhooks:  POST /api/webhooks`);
     console.log(`   Skills:    GET  /api/skills`);
     console.log(`   Usage:     GET  /api/usage`);
     console.log(`   Repurpose: POST /api/repurpose`);

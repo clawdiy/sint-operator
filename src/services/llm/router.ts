@@ -15,7 +15,7 @@
  */
 
 import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
+import { createRequire } from 'module';
 import type {
   LLMRouter, LLMOptions, LLMResponse, LLMResponseMeta,
   ModelConfig, ModelTier, ModelRouting,
@@ -62,6 +62,14 @@ export interface LLMRouterConfig {
   embeddingModel?: string;
   maxRetries?: number;
 }
+
+type AnthropicClient = {
+  messages: {
+    create: (params: Record<string, unknown>) => Promise<any>;
+  };
+};
+
+const require = createRequire(import.meta.url);
 
 /**
  * Check if we should run in dry-run mode (no real LLM calls).
@@ -300,7 +308,7 @@ async function withRetry<T>(
 
 export class LLMRouterImpl implements LLMRouter {
   private client: OpenAI;
-  private anthropicClient: Anthropic | null;
+  private anthropicClient: AnthropicClient | null;
   private models: ModelConfig;
   private embeddingModel: string;
   private totalTokens = 0;
@@ -322,9 +330,17 @@ export class LLMRouterImpl implements LLMRouter {
       maxRetries: config.maxRetries ?? 3,
     });
 
-    this.anthropicClient = !anthropicDry
-      ? new Anthropic({ apiKey: this.anthropicApiKey })
-      : null;
+    if (!anthropicDry) {
+      try {
+        const AnthropicCtor = require('@anthropic-ai/sdk').default;
+        this.anthropicClient = new AnthropicCtor({ apiKey: this.anthropicApiKey }) as AnthropicClient;
+      } catch {
+        this.anthropicClient = null;
+        console.warn('⚠️ Anthropic SDK not installed. Claude models are disabled until @anthropic-ai/sdk is available.');
+      }
+    } else {
+      this.anthropicClient = null;
+    }
 
     this.models = config.models;
     this.embeddingModel = config.embeddingModel ?? 'text-embedding-3-small';
