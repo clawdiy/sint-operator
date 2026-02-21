@@ -2849,3 +2849,12 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
   background: rgba(59, 130, 246, 0.05);
 }
+
+
+/* ═══════════════════════════════════════════════════════════
+   Content Preview Components
+   ═══════════════════════════════════════════════════════════ */
+
+.content-preview-container { display: flex; flex-direction: column; gap: 24px; }
+.preview-section { display: flex; flex-direction: column; gap: 16px; }
+.preview-section-title { margin: 0; font-size: 15px; color: var(--text-secondary); }
