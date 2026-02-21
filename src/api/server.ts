@@ -1672,7 +1672,7 @@ app.get('/health', (_req, res) => {
     join(process.cwd(), 'dist', 'ui-static'),          // cwd/dist/ui-static
   ];
 
-  const uiPath = uiPaths.find(p => existsSync(p)) ?? null;
+  const uiPath = uiPaths.find(p => existsSync(join(p, 'index.html'))) ?? null;
   console.log(`   UI search: ${uiPaths.map(p => `${existsSync(p) ? '✅' : '❌'} ${p}`).join('\n              ')}`);
   if (uiPath) {
     app.use(express.static(uiPath));
