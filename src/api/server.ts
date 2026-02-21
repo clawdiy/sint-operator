@@ -190,11 +190,14 @@ function parseNumber(value: unknown): number {
 type UsageSummaryResponse = {
   period: string;
   totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
   totalTokens: number;
   totalCostUnits: number;
   byModel: Record<string, { tokens: number; costUnits: number; runs: number }>;
   byPipeline: Record<string, { runs: number; costUnits: number }>;
   byBrand: Record<string, { runs: number; costUnits: number }>;
+  byDay: Record<string, { runs: number; tokens: number }>;
 };
 
 export function summarizeUsageFromRuns(runs: AsyncRun[], periodDays: number): UsageSummaryResponse {
@@ -204,11 +207,14 @@ export function summarizeUsageFromRuns(runs: AsyncRun[], periodDays: number): Us
   const summary: UsageSummaryResponse = {
     period: `${safeDays}d`,
     totalRuns: 0,
+    completedRuns: 0,
+    failedRuns: 0,
     totalTokens: 0,
     totalCostUnits: 0,
     byModel: {},
     byPipeline: {},
     byBrand: {},
+    byDay: {},
   };
 
   for (const run of runs) {
@@ -216,6 +222,8 @@ export function summarizeUsageFromRuns(runs: AsyncRun[], periodDays: number): Us
     if (Number.isFinite(startedTs) && startedTs < cutoffTs) continue;
 
     summary.totalRuns += 1;
+    if (run.status === 'completed') summary.completedRuns += 1;
+    if (run.status === 'failed') summary.failedRuns += 1;
 
     const nested = isObjectRecord(run.result) ? run.result : null;
     const metering = isObjectRecord(nested?.metering) ? nested.metering : null;
@@ -236,6 +244,14 @@ export function summarizeUsageFromRuns(runs: AsyncRun[], periodDays: number): Us
     }
     summary.byBrand[run.brandId].runs += 1;
     summary.byBrand[run.brandId].costUnits += runCost;
+
+    // By day
+    const day = (run.startedAt || '').slice(0, 10);
+    if (day) {
+      if (!summary.byDay[day]) summary.byDay[day] = { runs: 0, tokens: 0 };
+      summary.byDay[day].runs += 1;
+      summary.byDay[day].tokens += runTokens;
+    }
 
     const modelBreakdown = isObjectRecord(metering?.modelBreakdown) ? metering.modelBreakdown : null;
     if (!modelBreakdown) continue;
@@ -1249,6 +1265,44 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     if (!run) return res.status(404).json({ error: 'Run not found' });
     runStore.delete(id);
     res.json({ ok: true });
+  });
+
+
+  // Retry a failed/completed run with same parameters
+  app.post('/api/runs/:id/retry', async (req, res) => {
+    const { id } = req.params;
+    const original = runStore.get(id);
+    if (!original) return res.status(404).json({ error: 'Run not found' });
+    
+    try {
+      // Re-run the same pipeline with same brand
+      const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const newRun = {
+        id: runId,
+        status: 'queued' as const,
+        pipelineId: original.pipelineId,
+        brandId: original.brandId,
+        userId: original.userId,
+        startedAt: new Date().toISOString(),
+      };
+      runStore.save(newRun);
+      
+      // Start the pipeline (fire and forget)
+      const orchestrator = req.app.get('orchestrator');
+      if (orchestrator) {
+        orchestrator.runPipeline(original.pipelineId, original.brandId, {})
+          .then((result: any) => {
+            runStore.save({ ...newRun, status: 'completed', completedAt: new Date().toISOString(), result });
+          })
+          .catch((err: any) => {
+            runStore.save({ ...newRun, status: 'failed', completedAt: new Date().toISOString(), error: err.message });
+          });
+      }
+      
+      res.json({ runId, status: 'queued', message: 'Retry started' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Retry failed' });
+    }
   });
 
   app.get('/api/usage', (req, res) => {
