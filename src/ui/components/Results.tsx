@@ -237,9 +237,8 @@ export default function Results() {
       <h1>Results</h1>
       <p className="subtitle">View and export generated content from pipeline runs.</p>
 
-      <div className="two-col">
-        {/* Run List */}
-        <div className="card">
+      <div className="results-split">
+        <div className="results-list-panel card">
           <div className="live-activity-header">
             <h3 style={{ margin: 0 }}>Pipeline Runs</h3>
             <button className="btn small" onClick={() => void refreshRuns()} disabled={refreshing}>

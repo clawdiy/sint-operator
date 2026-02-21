@@ -2900,3 +2900,45 @@ input:focus, textarea:focus, select:focus {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+
+/* Results Split Layout */
+.results-split {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .results-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.results-list-panel {
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.results-detail-panel {
+  min-height: 300px;
+}
+
+/* Improved run list items */
+.pipeline-list { list-style: none; padding: 0; margin: 0; }
+.pipeline-item {
+  padding: 12px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-left: 3px solid transparent;
+  margin-bottom: 2px;
+}
+.pipeline-item:hover { background: rgba(255,255,255,0.04); }
+.pipeline-item.active {
+  background: rgba(16, 185, 129, 0.08);
+  border-left-color: var(--accent);
+}
