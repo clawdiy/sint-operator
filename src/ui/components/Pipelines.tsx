@@ -125,6 +125,9 @@ function getPipelineIcon(id: string): string {
   return '⚡';
 }
 
+
+const QUICK_PIPELINES = new Set(['content-repurpose', 'seo-blog', 'social-calendar']);
+
 export default function Pipelines() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);

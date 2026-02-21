@@ -23,8 +23,8 @@ export default function Usage() {
     ? Math.max(1, ...Object.values(usage.byModel).map((v: any) => v.tokens))
     : 1;
 
-  const maxCost = usage?.byPipeline
-    ? Math.max(1, ...Object.values(usage.byPipeline).map((v: any) => v.costUnits))
+  const maxPipelineRuns = usage?.byPipeline
+    ? Math.max(1, ...Object.values(usage.byPipeline).map((v: any) => v.runs))
     : 1;
 
   if (loading) return <Spinner text="Loading usage data..." />;
@@ -57,14 +57,14 @@ export default function Usage() {
             <div className="stat-icon">🪙</div>
             <div className="stat-body">
               <div className="stat-value">{(usage.totalTokens ?? 0).toLocaleString()}</div>
-              <div className="stat-label">AI Calls</div>
+              <div className="stat-label">AI Tokens</div>
             </div>
           </div>
           <div className="card stat-card">
             <div className="stat-icon">💰</div>
             <div className="stat-body">
-              <div className="stat-value">{(usage.totalCostUnits ?? 0).toFixed(1)}</div>
-              <div className="stat-label">Credits</div>
+              <div className="stat-value">{(usage.totalCostUnits ?? 0).toFixed(2)}</div>
+              <div className="stat-label">Credits Used</div>
             </div>
           </div>
         </div>
@@ -75,7 +75,9 @@ export default function Usage() {
         <div className="card">
           <h3>Model Breakdown</h3>
           <div className="bar-chart">
-            {Object.entries(usage.byModel).map(([model, data]: [string, any]) => (
+            {Object.entries(usage.byModel)
+              .sort(([,a]: any, [,b]: any) => b.tokens - a.tokens)
+              .map(([model, data]: [string, any]) => (
               <div key={model} className="bar-row">
                 <div className="bar-label">{model}</div>
                 <div className="bar-track">
@@ -84,7 +86,7 @@ export default function Usage() {
                     style={{ width: `${(data.tokens / maxTokens) * 100}%` }}
                   />
                 </div>
-                <div className="bar-value">{data.tokens.toLocaleString()} calls</div>
+                <div className="bar-value">{data.tokens.toLocaleString()} tokens • {data.runs} calls</div>
               </div>
             ))}
           </div>
@@ -96,16 +98,18 @@ export default function Usage() {
         <div className="card">
           <h3>Pipeline Breakdown</h3>
           <div className="bar-chart">
-            {Object.entries(usage.byPipeline).map(([pipeline, data]: [string, any]) => (
+            {Object.entries(usage.byPipeline)
+              .sort(([,a]: any, [,b]: any) => b.runs - a.runs)
+              .map(([pipeline, data]: [string, any]) => (
               <div key={pipeline} className="bar-row">
                 <div className="bar-label">{pipeline}</div>
                 <div className="bar-track">
                   <div
                     className="bar-fill secondary"
-                    style={{ width: `${(data.costUnits / maxCost) * 100}%` }}
+                    style={{ width: `${(data.runs / maxPipelineRuns) * 100}%` }}
                   />
                 </div>
-                <div className="bar-value">{data.runs} runs • {data.costUnits.toFixed(1)} CU</div>
+                <div className="bar-value">{data.runs} runs{data.costUnits > 0 ? ` • ${data.costUnits.toFixed(1)} CU` : ''}</div>
               </div>
             ))}
           </div>
@@ -121,11 +125,13 @@ export default function Usage() {
               <tr><th>Brand</th><th>Runs</th><th>Credits</th></tr>
             </thead>
             <tbody>
-              {Object.entries(usage.byBrand).map(([brand, data]: [string, any]) => (
+              {Object.entries(usage.byBrand)
+                .sort(([,a]: any, [,b]: any) => b.runs - a.runs)
+                .map(([brand, data]: [string, any]) => (
                 <tr key={brand}>
                   <td>{brand}</td>
                   <td style={{ fontFamily: 'var(--font-mono)' }}>{data.runs}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)' }}>{data.costUnits.toFixed(1)}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{data.costUnits.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -133,48 +139,42 @@ export default function Usage() {
         </div>
       )}
 
-      {/* Current Limits */}
+      {/* Current Session */}
       {current && (
         <div className="card">
-          <h3>Current Session</h3>
-          {/* TODO: If all values are zero, the issue may be backend metering not recording usage */}
+          <h3>Today's Activity</h3>
           <div className="card-grid" style={{ marginTop: '12px' }}>
             <div className="card stat-card">
               <div className="stat-icon">🏃</div>
               <div className="stat-body">
-                <div className="stat-value">{current.runs ?? current.totalRuns ?? 0}</div>
-                <div className="stat-label">Session Runs</div>
+                <div className="stat-value">{current.totalRuns ?? 0}</div>
+                <div className="stat-label">Today's Runs</div>
               </div>
             </div>
             <div className="card stat-card">
               <div className="stat-icon">🪙</div>
               <div className="stat-body">
-                <div className="stat-value">{(current.tokens ?? current.totalTokens ?? 0).toLocaleString()}</div>
+                <div className="stat-value">{(current.totalTokens ?? 0).toLocaleString()}</div>
                 <div className="stat-label">Tokens</div>
               </div>
             </div>
             <div className="card stat-card">
               <div className="stat-icon">💰</div>
               <div className="stat-body">
-                <div className="stat-value">{(current.costUnits ?? current.totalCostUnits ?? 0).toFixed?.(1) ?? 0}</div>
+                <div className="stat-value">{(current.totalCostUnits ?? 0).toFixed?.(2) ?? '0'}</div>
                 <div className="stat-label">Credits</div>
               </div>
             </div>
           </div>
-          {current.limit && (
-            <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Limit: {typeof current.limit === 'object' ? `${current.limit.tokens?.toLocaleString() ?? '∞'} tokens / ${current.limit.runs ?? '∞'} runs` : String(current.limit)}
-            </div>
-          )}
         </div>
       )}
 
-      {!usage && (
+      {(!usage || usage.totalRuns === 0) && (
         <div className="card">
           <div className="empty-state">
             <div className="empty-icon">📊</div>
             <div className="empty-title">No usage data yet</div>
-            <div className="empty-desc">No usage data yet — run some pipelines to see your stats here.</div>
+            <div className="empty-desc">Run some pipelines to see your usage stats here.</div>
           </div>
         </div>
       )}

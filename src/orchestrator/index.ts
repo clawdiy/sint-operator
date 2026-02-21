@@ -380,7 +380,6 @@ export class Orchestrator {
 
   // ─── Metering ─────────────────────────────────────────────
 
-  getUsageSummary(days?: number) { return this.metering.getSummary(days); }
   getModelUsage() { return this.llm.getUsage(); }
 
   async testLLM() { return this.llm.testConnection(); }
