@@ -2,7 +2,7 @@ import { join } from 'path';
 import { mkdirSync, rmSync } from 'fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { __resetAuthForTests, initAuthDB, signup } from '../src/auth/auth-service.js';
-import { getRateLimitKey, rewriteVersionedPath, shouldBypassApiAuth } from '../src/api/server.js';
+import { getPublishWorkerIntervalMs, getRateLimitKey, rewriteVersionedPath, shouldBypassApiAuth } from '../src/api/server.js';
 
 const TEST_ROOT = join(import.meta.dirname ?? '.', '__server_test_tmp__');
 
@@ -62,10 +62,11 @@ describe('server routing and rate-limit helpers', () => {
     expect(getRateLimitKey(req)).toBe('ip:203.0.113.7');
   });
 
-  it('bypasses API auth for public routes and webhooks', () => {
+  it('bypasses API auth for public routes and webhook POST only', () => {
     expect(shouldBypassApiAuth('/test-llm', true)).toBe(true);
     expect(shouldBypassApiAuth('/auth/login', true)).toBe(true);
-    expect(shouldBypassApiAuth('/webhooks', true)).toBe(true);
+    expect(shouldBypassApiAuth('/webhooks', true, 'POST')).toBe(true);
+    expect(shouldBypassApiAuth('/webhooks', true, 'GET')).toBe(false);
   });
 
   it('does not bypass API auth for publish routes when auth is enabled', () => {
@@ -76,5 +77,12 @@ describe('server routing and rate-limit helpers', () => {
   it('bypasses all API auth checks when auth is disabled', () => {
     expect(shouldBypassApiAuth('/publish', false)).toBe(true);
     expect(shouldBypassApiAuth('/runs', false)).toBe(true);
+  });
+
+  it('normalizes publish worker interval bounds', () => {
+    expect(getPublishWorkerIntervalMs(undefined)).toBe(30_000);
+    expect(getPublishWorkerIntervalMs('100')).toBe(5_000);
+    expect(getPublishWorkerIntervalMs('9999999')).toBe(300_000);
+    expect(getPublishWorkerIntervalMs('45000')).toBe(45_000);
   });
 });

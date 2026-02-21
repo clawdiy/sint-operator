@@ -438,6 +438,10 @@ export async function verifyAllTokens(logger?: Logger, credentials?: SocialCrede
 
 export function __resetSocialPublishingForTests(): void {
   publishQueueMemory.length = 0;
+  closePublishQueueStore();
+}
+
+export function closePublishQueueStore(): void {
   if (queueStore) {
     queueStore.close();
     queueStore = null;

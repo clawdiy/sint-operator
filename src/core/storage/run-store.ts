@@ -99,6 +99,10 @@ export class RunStore {
     return result.changes;
   }
 
+  close(): void {
+    this.db.close();
+  }
+
   private rowToRun(row: Record<string, unknown>): AsyncRun {
     const run: AsyncRun = {
       id: row.id as string,

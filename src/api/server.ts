@@ -16,6 +16,7 @@
 import express from 'express';
 import { join, dirname, resolve } from 'path';
 import { RunStore, type AsyncRun } from '../core/storage/run-store.js';
+import { WebhookStore } from '../core/storage/webhook-store.js';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
@@ -26,14 +27,14 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { nanoid } from 'nanoid';
 import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
-import { initPublishQueueStore } from '../services/social/index.js';
+import { closePublishQueueStore, initPublishQueueStore, processQueue } from '../services/social/index.js';
 import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
 import { notifyPipelineComplete, isTelegramConfigured } from '../skills/notifier/telegram.js';
 import { createAuthRouter } from '../auth/auth-routes.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/auth-middleware.js';
 import { getUser, initAuthDB, verifyToken } from '../auth/auth-service.js';
 import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '../auth/api-key-service.js';
-import { getSocialStatus, initSocialAccountDB, storeSocialCredentials } from '../auth/social-account-service.js';
+import { getSocialCredentials, getSocialStatus, initSocialAccountDB, storeSocialCredentials } from '../auth/social-account-service.js';
 import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, createNotificationsRouter } from './notifications.js';
 import { createBrand, getBrand, listBrands, saveBrand } from '../core/brand/manager.js';
@@ -95,9 +96,11 @@ export function getRateLimitKey(req: express.Request): string {
   return `ip:${ipKeyGenerator(req.ip ?? '127.0.0.1')}`;
 }
 
-export function shouldBypassApiAuth(path: string, authEnabled: boolean): boolean {
+export function shouldBypassApiAuth(path: string, authEnabled: boolean, method: string = 'GET'): boolean {
   if (!authEnabled) return true;
-  return path === '/test-llm' || path.startsWith('/auth') || path.startsWith('/webhooks');
+  if (path === '/test-llm' || path.startsWith('/auth')) return true;
+  if (path.startsWith('/webhooks')) return method.toUpperCase() === 'POST';
+  return false;
 }
 
 // ─── Rate Limiters ───────────────────────────────────────────
@@ -124,6 +127,7 @@ const pipelineLimiter = rateLimit({
 
 
 let runStore: RunStore;
+let webhookStore: WebhookStore;
 const ASYNC_RUN_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 interface IngestedWebhookEvent {
@@ -137,7 +141,6 @@ interface IngestedWebhookEvent {
   receivedAt: string;
 }
 
-const webhooksByUser = new Map<string, IngestedWebhookEvent[]>();
 const MAX_WEBHOOK_EVENTS_PER_USER = 100;
 
 function generateRunId(): string {
@@ -323,12 +326,39 @@ function resolveWebhookUser(req: express.Request, payloadUserId?: string): { use
 }
 
 function storeWebhookEvent(event: IngestedWebhookEvent): void {
-  const bucket = webhooksByUser.get(event.userId) ?? [];
-  bucket.push(event);
-  while (bucket.length > MAX_WEBHOOK_EVENTS_PER_USER) {
-    bucket.shift();
-  }
-  webhooksByUser.set(event.userId, bucket);
+  webhookStore.save(event);
+  webhookStore.trimUserEvents(event.userId, MAX_WEBHOOK_EVENTS_PER_USER);
+}
+
+function listWebhookEvents(userId: string, options?: {
+  source?: string;
+  event?: string;
+  limit?: number;
+}): IngestedWebhookEvent[] {
+  return webhookStore.list({
+    userId,
+    source: options?.source,
+    event: options?.event,
+    limit: options?.limit,
+  });
+}
+
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+export function getPublishWorkerIntervalMs(raw: string | undefined): number {
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 30_000;
+  return Math.max(5_000, Math.min(parsed, 5 * 60_000));
+}
+
+function getPublishWorkerEnabled(raw: string | undefined): boolean {
+  return parseBoolean(raw, true);
 }
 
 const apiKeySchema = z.object({
@@ -472,6 +502,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   const configDir = resolve(options.configDir ?? process.env.SINT_CONFIG_DIR ?? './config');
   const brandsDir = join(configDir, 'brands');
   runStore = new RunStore(join(dataDir, 'runs.db'));
+  webhookStore = new WebhookStore(join(dataDir, 'webhooks.db'));
 
   const app = express();
 
@@ -479,6 +510,31 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   initApiKeyDB(dataDir);
   initSocialAccountDB(dataDir);
   initPublishQueueStore(dataDir);
+
+  const publishWorkerEnabled = getPublishWorkerEnabled(process.env.PUBLISH_QUEUE_WORKER_ENABLED);
+  const publishWorkerIntervalMs = getPublishWorkerIntervalMs(process.env.PUBLISH_QUEUE_WORKER_INTERVAL_MS);
+  let publishWorkerTimer: NodeJS.Timeout | null = null;
+  let publishWorkerRunning = false;
+
+  const runPublishQueueWorker = async (): Promise<void> => {
+    if (publishWorkerRunning) return;
+    publishWorkerRunning = true;
+    try {
+      const results = await processQueue({
+        limit: 50,
+        resolveCredentials: (userId) => getSocialCredentials(userId),
+      });
+      if (results.length > 0) {
+        const success = results.filter(result => result.success).length;
+        const failed = results.length - success;
+        console.log(`[publish-worker] processed=${results.length} success=${success} failed=${failed}`);
+      }
+    } catch (error) {
+      console.error('[publish-worker] processing failed', error);
+    } finally {
+      publishWorkerRunning = false;
+    }
+  };
 
   app.use((req, _res, next) => {
     const rewritten = rewriteVersionedPath(req.url);
@@ -577,7 +633,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // Protect all /api routes (only when AUTH_ENABLED=true)
   app.use('/api', (req, res, next) => {
-    if (shouldBypassApiAuth(req.path, process.env.AUTH_ENABLED === 'true')) {
+    if (shouldBypassApiAuth(req.path, process.env.AUTH_ENABLED === 'true', req.method)) {
       next();
       return;
     }
@@ -630,6 +686,21 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
       }
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
+  });
+
+  app.get('/api/webhooks', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+
+    const items = listWebhookEvents(user.userId, {
+      source: parseStringQuery(req.query.source),
+      event: parseStringQuery(req.query.event),
+      limit: parseLimitParam(req.query.limit, 50),
+    });
+    res.json({
+      items,
+      total: items.length,
+    });
   });
 
   app.post('/api/settings/api-key', (req, res) => {
@@ -1213,6 +1284,18 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     console.log('   UI:       http://localhost:' + port + '/');
   }
 
+  // ─── Background Publish Worker ─────────────────────────
+
+  if (publishWorkerEnabled) {
+    publishWorkerTimer = setInterval(() => {
+      void runPublishQueueWorker();
+    }, publishWorkerIntervalMs);
+    if (typeof publishWorkerTimer.unref === 'function') {
+      publishWorkerTimer.unref();
+    }
+    void runPublishQueueWorker();
+  }
+
   // ─── Start ──────────────────────────────────────────────
 
   const server = app.listen(port, () => {
@@ -1228,6 +1311,21 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     console.log(`   Run Poll:  GET  /api/runs/:id`);
     console.log(`   Run Stream: GET  /api/runs/:id/stream (SSE)`);
     console.log(`   Run Cancel: POST /api/runs/:id/cancel\n`);
+    if (publishWorkerEnabled) {
+      console.log(`   Publish Worker: enabled (${publishWorkerIntervalMs}ms interval)`);
+    } else {
+      console.log('   Publish Worker: disabled');
+    }
+  });
+
+  server.on('close', () => {
+    if (publishWorkerTimer) {
+      clearInterval(publishWorkerTimer);
+      publishWorkerTimer = null;
+    }
+    closePublishQueueStore();
+    runStore.close();
+    webhookStore.close();
   });
 
   return { app, server };
