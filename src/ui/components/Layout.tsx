@@ -39,6 +39,7 @@ export default function Layout({ currentPage, onNavigate, children }: Props) {
               className={`nav-item ${currentPage === item.page ? 'active' : ''}`}
               onClick={() => onNavigate(item.page)}
               title={item.label}
+              data-tooltip={item.label}
             >
               <span className="nav-icon">{item.icon}</span>
               {!collapsed && <span className="nav-label">{item.label}</span>}
