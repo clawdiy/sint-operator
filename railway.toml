@@ -7,3 +7,7 @@ healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
+
+# Note: Add a volume mount in Railway dashboard for persistent SQLite storage
+# Settings → Volumes → Mount: /app/data
+# This ensures runs, usage data, and API keys persist across deploys

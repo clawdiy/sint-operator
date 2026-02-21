@@ -385,6 +385,10 @@ export class Orchestrator {
 
   async testLLM() { return this.llm.testConnection(); }
 
+  getUsageSummary(days: number = 30) {
+    return this.metering.getSummary(days);
+  }
+
   setUsageLimits(limits: { daily?: number; monthly?: number; perRun?: number }) {
     this.metering.setLimits(limits);
   }

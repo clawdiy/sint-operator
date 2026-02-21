@@ -1258,7 +1258,23 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     const daysRaw = Number.parseInt(String(req.query.days ?? ''), 10);
     const days = Number.isFinite(daysRaw) && daysRaw > 0 ? daysRaw : 30;
     const runs = runStore.list({ userId: user.userId, limit: 5000 });
-    res.json(summarizeUsageFromRuns(runs, days));
+    const runSummary = summarizeUsageFromRuns(runs, days);
+
+    // Also get metering tracker data if available (has per-step granularity)
+    try {
+      const meterSummary = orchestrator.getUsageSummary(days);
+      // Merge: use whichever source has more data
+      if (meterSummary.totalTokens > runSummary.totalTokens) {
+        runSummary.totalTokens = meterSummary.totalTokens;
+        runSummary.totalCostUnits = meterSummary.totalCostUnits;
+      }
+      // Merge model breakdown from metering (more granular)
+      if (Object.keys(meterSummary.byModel).length > Object.keys(runSummary.byModel).length) {
+        runSummary.byModel = meterSummary.byModel;
+      }
+    } catch { /* metering tracker may not be available */ }
+
+    res.json(runSummary);
   });
 
   app.get('/api/usage/current', (req, res) => {
@@ -1266,6 +1282,19 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     if (!user) return;
 
     const summary = summarizeUsageFromRuns(runStore.list({ userId: user.userId, limit: 500 }), 1);
+
+    // Merge metering tracker data for today
+    try {
+      const meterSummary = orchestrator.getUsageSummary(1);
+      if (meterSummary.totalTokens > summary.totalTokens) {
+        summary.totalTokens = meterSummary.totalTokens;
+        summary.totalCostUnits = meterSummary.totalCostUnits;
+      }
+      if (Object.keys(meterSummary.byModel).length > Object.keys(summary.byModel).length) {
+        summary.byModel = meterSummary.byModel;
+      }
+    } catch { /* metering tracker may not be available */ }
+
     res.json({
       totalRuns: summary.totalRuns,
       totalTokens: summary.totalTokens,
