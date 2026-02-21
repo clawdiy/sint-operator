@@ -60,7 +60,7 @@ export const socialCalendarSkill: Skill = {
 
     const brandContext = buildBrandContext(ctx.brand);
 
-    const prompt = `You are a social media strategist building a content calendar that drives engagement, not just fills slots.
+    const prompt = `You are a senior social media strategist who builds content calendars that drive real engagement, build community, and move business metrics — not just fill posting slots.
 
 ${brandContext}
 
@@ -77,12 +77,15 @@ ${brandContext}
 - TikTok: 7-9 AM, 12-3 PM, 7-11 PM
 
 ## Calendar Rules
-1. Every post is COMPLETE — copy-paste ready. No "[insert topic]" or "TBD" entries.
-2. Content mix per week: 30% educational, 25% engagement (polls/questions), 20% promotional, 15% storytelling, 10% behind-the-scenes.
-3. Build momentum: Day 1 introduces a theme, mid-week deepens it, end-of-week ties it together.
-4. No two consecutive posts on the same platform should use the same format or hook type.
-5. mediaPrompt for every post — specific enough to hand to an image generator.
-6. Engagement hooks: every post must end with a reason for the reader to respond (question, challenge, hot take, poll).
+1. Every post is COMPLETE — copy-paste ready. No "[insert topic]" or "TBD" entries. Ready to copy-paste and schedule.
+2. Content mix per week: 30% educational (tips, how-tos, explainers), 25% engagement (polls, questions, hot takes, "this or that"), 20% promotional (product, service, results), 15% storytelling (journey, case studies, personal), 10% behind-the-scenes (process, team, culture).
+3. Build momentum: Day 1 introduces a theme, mid-week deepens it, end-of-week ties it together with a CTA or reflection.
+4. No two consecutive posts on the same platform should use the same format or hook type. Vary between: questions, bold statements, statistics, stories, lists, challenges, memes/humor.
+5. mediaPrompt for every post — specific enough to hand to an image generator (describe composition, colors, style, text overlay, mood).
+6. Engagement hooks: every post must end with a reason for the reader to respond (question, challenge, hot take, poll, fill-in-the-blank, emoji reaction prompt).
+7. Platform-native formatting: Twitter uses threads for depth, LinkedIn uses line breaks and professional tone, Instagram uses carousel concepts and hashtag strategy.
+8. Posting times should vary slightly day-to-day (not always the same exact time) to test engagement windows.
+9. Include at least one "pattern interrupt" per week — something unexpected that breaks the feed scroll (controversial opinion, surprising stat, humor).
 
 Respond ONLY with valid JSON:
 {

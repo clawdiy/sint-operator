@@ -88,7 +88,7 @@ Respond with JSON:
 
     // Step 2: Write full article (complex tier — quality matters)
     const writeResult = await ctx.llm.complete(
-      `You are a technical writer who makes complex topics clear and engaging. Write a complete blog article.
+      `You are a senior content strategist and technical writer who creates authoritative, SEO-optimized articles that rank AND engage. Write a complete, comprehensive blog article of at least 1200 words.
 
 ${brandContext}
 
@@ -101,16 +101,21 @@ Write a complete blog article:
 - Target: ${wordCount} words, ${style} style
 
 Writing Rules:
-1. Markdown with proper H2/H3 headers matching the outline.
-2. Opening paragraph: skip "In today's..." or "In the world of..." — start with a specific fact, question, or scenario.
+1. Markdown with proper H2/H3 headers matching the outline. Use H2 for main sections, H3 for subsections.
+2. Opening paragraph: skip "In today's..." or "In the world of..." — start with a specific fact, surprising statistic, question, or real-world scenario that creates urgency.
 3. Each section: lead with the key insight, then support it. Not the other way around.
-4. Use bullet points for lists of 3+ items. Use numbered lists for sequential steps.
+4. Use bullet points for lists of 3+ items. Use numbered lists for sequential steps. Use bold for key terms on first mention.
 5. Include [internal link: topic] and [external link: source] placeholders where references would strengthen credibility.
-6. Conclusion: 2-3 sentences max, with a clear CTA.
-7. Write for humans first, search engines second. If a keyword insertion feels awkward, skip it.
-8. Every claim needs either data, an example, or a logical argument. No unsupported assertions.
+6. Include at least 2-3 data points, statistics, or concrete examples throughout. Cite sources where possible.
+7. Add a TL;DR or key takeaways section near the top for skimmers.
+8. Conclusion: 2-3 sentences max, with a clear CTA. Summarize the single most important takeaway.
+9. Write for humans first, search engines second. If a keyword insertion feels awkward, skip it.
+10. Every claim needs either data, an example, or a logical argument. No unsupported assertions.
+11. Aim for ${wordCount}+ words minimum. Each H2 section should be 200-400 words. Do NOT pad — add depth, examples, and actionable advice instead.
+12. Use transition sentences between sections for flow. Vary sentence length for readability.
+13. Include a FAQ section (3-5 questions) at the end to capture featured snippet opportunities.
 
-Write the FULL article now. Every section complete.`,
+Write the FULL article now. Every section complete. Do not truncate or summarize sections.`,
       { tier: 'complex', maxTokens: 8192, temperature: 0.7 }
     );
 
