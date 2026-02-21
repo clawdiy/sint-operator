@@ -2858,3 +2858,45 @@ input:focus, textarea:focus, select:focus {
 .content-preview-container { display: flex; flex-direction: column; gap: 24px; }
 .preview-section { display: flex; flex-direction: column; gap: 16px; }
 .preview-section-title { margin: 0; font-size: 15px; color: var(--text-secondary); }
+
+
+/* Pipeline Runner Modal */
+.pipeline-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 900;
+  padding: 24px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.pipeline-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.2s ease-out;
+}
+
+.pipeline-modal::-webkit-scrollbar { width: 6px; }
+.pipeline-modal::-webkit-scrollbar-track { background: transparent; }
+.pipeline-modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

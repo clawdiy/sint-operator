@@ -309,16 +309,17 @@ export default function Pipelines() {
         )}
       </div>
 
-      {/* Runner Form */}
+      {/* Runner Form — Modal Overlay */}
       {selected && (
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <div>
-              <h3 style={{ margin: 0 }}>{getPipelineIcon(selected.id)} {selected.name}</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{selected.description}</p>
+        <div className="pipeline-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setSelected(null); setResult(null); } }}>
+          <div className="pipeline-modal">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>{getPipelineIcon(selected.id)} {selected.name}</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{selected.description}</p>
+              </div>
+              <button className="btn small" onClick={() => { setSelected(null); setResult(null); }}>✕ Close</button>
             </div>
-            <button className="btn small" onClick={() => { setSelected(null); setResult(null); }}>✕ Close</button>
-          </div>
 
           {selected.steps && selected.steps.length > 0 && (
             <PipelineSteps steps={selected.steps} streamSteps={streamSteps} running={running} result={result} />
@@ -444,6 +445,7 @@ export default function Pipelines() {
               <pre>{JSON.stringify(result, null, 2)}</pre>
             </div>
           )}
+          </div>
         </div>
       )}
     </div>
