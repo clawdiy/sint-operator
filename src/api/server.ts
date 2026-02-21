@@ -1679,7 +1679,12 @@ app.get('/health', (_req, res) => {
     // SPA fallback — serve index.html for non-API routes
     app.get('*', (req, res) => {
       if (!req.path.startsWith('/api') && !req.path.startsWith('/health')) {
-        res.sendFile(join(uiPath, 'index.html'));
+        const indexFile = join(uiPath, 'index.html');
+        if (existsSync(indexFile)) {
+          res.sendFile(indexFile);
+        } else {
+          res.status(200).send('<html><body><h1>SINT Operator</h1><p>API is running. UI build pending.</p><p><a href="/health">/health</a> | <a href="/api/docs">/api/docs</a></p></body></html>');
+        }
       }
     });
     console.log('   UI:       http://localhost:' + port + '/');
