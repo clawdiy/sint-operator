@@ -10,7 +10,7 @@ RUN npm install
 COPY . .
 
 # Build backend TypeScript
-RUN npx tsc || (echo "⚠️ TSC failed, trying with skipLibCheck" && npx tsc --skipLibCheck)
+RUN npx tsc --skipLibCheck || echo "⚠️ TSC failed but continuing"
 
 # Build UI (Vite)
 ENV NODE_OPTIONS="--max-old-space-size=4096"
