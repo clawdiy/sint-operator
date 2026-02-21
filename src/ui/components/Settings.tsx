@@ -136,7 +136,21 @@ function ConnectModal({ platform, onClose, onSaved }: { platform: 'twitter' | 'l
         >
           {saving ? 'Saving...' : 'Save Credentials'}
         </button>
+      
+      <h2>Developer Tools</h2>
+      <div className="card" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+        <a href="/api/docs" target="_blank" className="btn" style={{ textDecoration: 'none' }}>
+          📖 API Documentation (Swagger)
+        </a>
+        <a href="/api/docs/openapi.yaml" target="_blank" className="btn" style={{ textDecoration: 'none' }}>
+          📄 OpenAPI Spec
+        </a>
+        <a href="/health" target="_blank" className="btn" style={{ textDecoration: 'none' }}>
+          💚 Health Check
+        </a>
       </div>
+
+</div>
     </div>
   );
 }

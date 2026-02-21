@@ -14,11 +14,17 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (localStorage.getItem('sint_onboarding_done')) return;
+    if (localStorage.getItem('sint_onboarding_done') === '1') return;
     getOnboardingStatus()
       .then(s => { if (s.needsSetup) setShow(true); })
       .catch(() => {});
   }, []);
+
+  const dismiss = () => {
+    localStorage.setItem('sint_onboarding_done', '1');
+    setShow(false);
+    onComplete();
+  };
 
   if (!show) return null;
 
@@ -39,9 +45,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
         brandUrl: brandUrl || undefined,
         brandTone: tones.length > 0 ? tones : undefined,
       });
-      localStorage.setItem('sint_onboarding_done', '1');
-      setShow(false);
-      onComplete();
+      dismiss();
     } catch (e: any) {
       setError(e.message || 'Setup failed');
     } finally {
@@ -51,7 +55,8 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div className="onboarding-overlay">
-      <div className="onboarding-modal">
+      <div className="onboarding-modal" style={{ position: 'relative' }}>
+        <button onClick={dismiss} style={{ position: 'absolute', top: 12, right: 16, background: 'none', border: 'none', color: '#999', fontSize: 22, cursor: 'pointer', lineHeight: 1 }} aria-label="Close">×</button>
         <div className="onboarding-progress">
           {[0, 1, 2].map(i => (
             <div key={i} className={`onboarding-progress-step ${i <= step ? 'active' : ''}`} />
@@ -64,6 +69,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
             <h2>Welcome to SINT Marketing Operator</h2>
             <p>AI-powered content repurposing, SEO blogs, and social calendars — all from a single input. Let's get you set up in 2 minutes.</p>
             <button className="btn primary" onClick={() => setStep(1)}>Get Started →</button>
+            <div style={{ marginTop: 12 }}><button onClick={dismiss} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline', fontSize: 13 }}>Skip setup</button></div>
           </div>
         )}
 
@@ -73,17 +79,13 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
             <h2>Your OpenAI API Key</h2>
             <p>SINT uses a bring-your-own-key (BYOK) model. Your key stays on your server and is never shared.</p>
             <div className="form-group">
-              <input
-                type="password"
-                placeholder="sk-..."
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-              />
+              <input type="password" placeholder="sk-..." value={apiKey} onChange={e => setApiKey(e.target.value)} />
             </div>
             <div className="onboarding-nav">
               <button className="btn" onClick={() => setStep(0)}>← Back</button>
               <button className="btn primary" onClick={() => setStep(2)} disabled={!apiKey.trim()}>Next →</button>
             </div>
+            <div style={{ marginTop: 12 }}><button onClick={dismiss} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline', fontSize: 13 }}>Skip setup</button></div>
           </div>
         )}
 
@@ -117,6 +119,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
                 {submitting ? 'Setting up...' : 'Create Brand & Start 🚀'}
               </button>
             </div>
+            <div style={{ marginTop: 12 }}><button onClick={dismiss} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline', fontSize: 13 }}>Skip setup</button></div>
           </div>
         )}
       </div>
