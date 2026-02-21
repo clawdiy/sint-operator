@@ -84,3 +84,29 @@ export const PLATFORM_ICONS: Record<string, string> = {
   tiktok: '🎵',
   youtube: '📺',
 };
+
+/** Simple markdown to HTML for blog preview (no dependencies) */
+export function renderMarkdown(md: string): string {
+  if (!md) return '';
+  let html = md
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Bold and italic
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Lists
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Links
+    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    // Code
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    // Paragraphs (double newlines)
+    .replace(/\n\n/g, '</p><p>')
+    // Line breaks
+    .replace(/\n/g, '<br/>');
+  
+  return '<p>' + html + '</p>';
+}
