@@ -315,6 +315,23 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     next();
   });
 
+  // ─── API Docs ────────────────────────────────────────────
+
+  app.get("/api/docs/openapi.yaml", (_req, res) => {
+    res.sendFile(join(process.cwd(), "docs", "openapi.yaml"));
+  });
+
+  app.get("/api/docs", (_req, res) => {
+    res.send(`<!DOCTYPE html>
+<html><head><title>SINT API Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+</head><body>
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>SwaggerUIBundle({ url: "/api/docs/openapi.yaml", dom_id: "#swagger-ui" })</script>
+</body></html>`);
+  });
+
   // ─── Health ─────────────────────────────────────────────
 
   app.get('/health', (_req, res) => {
