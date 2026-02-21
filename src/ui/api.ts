@@ -262,7 +262,7 @@ export const getSocialStatus = () => request<{
 }>('/api/settings/social/status');
 
 export const connectSocial = (platform: string, credentials: Record<string, string>) =>
-  request<{ok: boolean}>(\`/api/settings/social/\${platform}\`, {
+  request<{ok: boolean}>(`/api/settings/social/${platform}`, {
     method: 'POST',
     body: JSON.stringify(credentials),
   });
