@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { getRuns, getRun, deleteRun, normalizeRunPayload, isRunInProgress, cancelRun } from '../api';
+import { getRuns, getRun, deleteRun, retryRun, normalizeRunPayload, isRunInProgress, cancelRun } from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
 import ContentPreview from './ContentPreview';
@@ -232,6 +232,14 @@ export default function Results() {
   };
 
 
+  const handleRetry = async (id: string) => {
+    try {
+      const result = await retryRun(id);
+      addToast('success', 'Retry started!');
+      refreshRuns();
+    } catch { addToast('error', 'Retry failed'); }
+  };
+
   return (
     <div className="page">
       <h1>Results</h1>
@@ -295,9 +303,15 @@ export default function Results() {
               <div className="live-activity-header" style={{ marginBottom: '10px' }}>
                 <h3 style={{ margin: 0 }}>{friendlyPipeline(selected.pipelineId) || 'Run'} — {new Date(selected.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, {new Date(selected.startedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</h3>
                 {isRunInProgress(selected.status) && (
-                  <button className="btn danger small" onClick={handleCancelSelectedRun} disabled={canceling}>
-                    {canceling ? 'Canceling…' : 'Cancel Run'}
-                  </button>
+                  {isRunInProgress(selected.status) ? (
+                    <button className="btn danger small" onClick={handleCancelSelectedRun} disabled={canceling}>
+                      {canceling ? 'Canceling…' : 'Cancel Run'}
+                    </button>
+                  ) : (
+                    <button className="btn small" onClick={() => handleRetry(selected.id)}>
+                      🔄 Retry
+                    </button>
+                  )}
                 )}
               </div>
               <div className="meta-row">

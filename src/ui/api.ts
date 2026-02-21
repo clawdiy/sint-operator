@@ -290,3 +290,6 @@ export const retryDeadLetterItem = (id: string) =>
 
 export const deleteRun = (id: string) =>
   request<{ ok: boolean }>(\`\${BASE}/api/runs/\${id}\`, { method: 'DELETE' });
+
+export const retryRun = (id: string) =>
+  request<{ runId: string; status: string }>(\`\${BASE}/api/runs/\${id}/retry\`, { method: 'POST' });

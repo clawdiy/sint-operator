@@ -136,7 +136,7 @@ ${JSON.stringify(contentMap, null, 2).slice(0, 5000)}
 Use the hooks, themes, and platform suitability scores to guide your content creation.
 Prioritize the highest-scoring hooks for each platform.` : '';
 
-    const prompt = `You are a content repurposing specialist. Your job: take one piece of content and make it native to each target platform. Not reformatted — reimagined.
+    const prompt = `You are an elite content repurposing specialist who turns one piece of content into platform-native masterpieces. Your job is NOT to reformat — it's to REIMAGINE the core message for each platform's unique culture, algorithm, and audience behavior.
 
 ${brandContext}
 
@@ -152,11 +152,15 @@ ${platformInstructions}
 
 ## Rules
 - Every deliverable must be READY TO COPY-PASTE AND POST. No placeholders like [insert X].
-- Each platform version uses a different hook. Do not repeat the same opening.
-- Video platforms (TikTok, Reels, Shorts): provide a script with [VISUAL: description] cues on separate lines.
-- Hashtags: research-quality tags, not generic (#content #marketing = lazy).
-- mediaPrompt: describe the exact visual that would make this post perform — composition, mood, style, subject.
+- Each platform version uses a DIFFERENT hook and angle. Do not repeat the same opening across platforms.
+- Twitter/X: Lead with a contrarian take or surprising stat. Threads: first tweet is the hook, last tweet has CTA. Punchy, direct, no filler words.
+- LinkedIn: Open with a bold professional insight or personal story. Use short paragraphs (1-2 sentences each). End with a thought-provoking question.
+- Instagram: Write like you're talking to a friend. Emotive, visual language. Front-load the hook (first line visible before "more"). Strategic hashtag blocks (mix of broad + niche).
+- Video platforms (TikTok, Reels, Shorts): provide a script with [VISUAL: description] cues on separate lines. First 2-3 seconds MUST hook.
+- Hashtags: research-quality tags specific to the niche, not generic (#content #marketing = lazy). Mix 3-5 broad reach tags with 5-10 niche tags.
+- mediaPrompt: describe the exact visual — composition, color palette, mood, style (photo/illustration/3D), subject positioning, text overlay if needed.
 - If the source content doesn't have enough substance for a platform, say so in notes instead of padding with filler.
+- Match each platform's native formatting: Twitter uses line breaks for emphasis, LinkedIn uses emoji bullets, Instagram uses line breaks + dots for spacing.
 
 Respond ONLY with valid JSON:
 {
