@@ -29,9 +29,9 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
 
 // Model routing configuration
 const MODELS: ModelConfig = {
-  complex: process.env.SINT_MODEL_COMPLEX ?? 'claude-sonnet-4-5-20250514',
-  routine: process.env.SINT_MODEL_ROUTINE ?? 'claude-3-5-haiku-20241022',
-  fallback: process.env.SINT_MODEL_FALLBACK ?? 'claude-3-5-haiku-20241022',
+  complex: process.env.SINT_MODEL_COMPLEX ?? 'o3',
+  routine: process.env.SINT_MODEL_ROUTINE ?? 'gpt-4.1-mini',
+  fallback: process.env.SINT_MODEL_FALLBACK ?? 'gpt-4.1-nano',
 };
 
 if (!OPENAI_API_KEY && !ANTHROPIC_API_KEY) {
