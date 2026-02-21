@@ -15,6 +15,7 @@
 
 import express from 'express';
 import { join, dirname, resolve } from 'path';
+import { ScheduleStore } from '../core/storage/schedule-store.js';
 import { RunStore, type AsyncRun } from '../core/storage/run-store.js';
 import { WebhookStore } from '../core/storage/webhook-store.js';
 import { existsSync, mkdirSync } from 'fs';
@@ -139,6 +140,7 @@ const pipelineLimiter = rateLimit({
 
 let runStore: RunStore;
 let webhookStore: WebhookStore;
+  let scheduleStore: ScheduleStore;
 const ASYNC_RUN_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 interface IngestedWebhookEvent {
@@ -529,6 +531,7 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   const configDir = resolve(options.configDir ?? process.env.SINT_CONFIG_DIR ?? './config');
   const brandsDir = join(configDir, 'brands');
   runStore = new RunStore(join(dataDir, 'runs.db'));
+    scheduleStore = new ScheduleStore(join(dataDir, 'schedules.db'));
   webhookStore = new WebhookStore(join(dataDir, 'webhooks.db'));
 
   const app = express();
@@ -725,6 +728,51 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
         })),
       });
     }
+  });
+
+
+  // ─── Schedules ──────────────────────────────────────────────
+  app.get('/api/schedules', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+    const schedules = scheduleStore.list({ userId: brandUserId(user) ? user.userId : undefined });
+    res.json(schedules);
+  });
+
+  app.post('/api/schedules', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+    const { pipelineId, brandId, inputs, nextRunAt, cronExpression } = req.body;
+    if (!pipelineId || !brandId || !nextRunAt) {
+      return res.status(400).json({ error: 'pipelineId, brandId, and nextRunAt are required' });
+    }
+    const id = `sched_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const schedule = {
+      id, pipelineId, brandId,
+      inputs: inputs || {},
+      nextRunAt,
+      cronExpression: cronExpression || undefined,
+      enabled: true,
+      userId: user.userId,
+      createdAt: new Date().toISOString(),
+    };
+    scheduleStore.save(schedule);
+    res.json(schedule);
+  });
+
+  app.delete('/api/schedules/:id', (req, res) => {
+    const schedule = scheduleStore.get(req.params.id);
+    if (!schedule) return res.status(404).json({ error: 'Schedule not found' });
+    scheduleStore.delete(req.params.id);
+    res.json({ ok: true });
+  });
+
+  app.patch('/api/schedules/:id', (req, res) => {
+    const schedule = scheduleStore.get(req.params.id);
+    if (!schedule) return res.status(404).json({ error: 'Schedule not found' });
+    const updated = { ...schedule, ...req.body, id: schedule.id };
+    scheduleStore.save(updated);
+    res.json(updated);
   });
 
 app.get('/health', (_req, res) => {
