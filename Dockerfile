@@ -7,6 +7,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
+# Cache bust for UI rebuilds
+ARG CACHEBUST=1
 RUN npx tsc
 RUN npm run ui:build || true
 # Ensure ui-static exists even if Vite build fails

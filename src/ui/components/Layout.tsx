@@ -22,14 +22,24 @@ interface Props {
 
 export default function Layout({ currentPage, onNavigate, children }: Props) {
   const [collapsed, setCollapsed] = React.useState(() => {
-    // Collapsed by default on mobile, expanded on desktop
-    return typeof window !== 'undefined' && window.innerWidth < 768;
+    if (typeof window === 'undefined') return false;
+    const stored = localStorage.getItem('sint_sidebar_collapsed');
+    if (stored !== null) return stored === 'true';
+    return window.innerWidth < 768;
   });
+
+  const toggleSidebar = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sint_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
 
   return (
     <div className="layout">
       <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-header" onClick={() => setCollapsed(!collapsed)}>
+        <div className="sidebar-header" onClick={toggleSidebar}>
           <span className="logo">🎯</span>
           {!collapsed && <span className="logo-text">SINT</span>}
         </div>
@@ -48,6 +58,9 @@ export default function Layout({ currentPage, onNavigate, children }: Props) {
           ))}
         </nav>
         <div className="sidebar-footer">
+          <button className="sidebar-toggle" onClick={toggleSidebar} title={collapsed ? 'Expand' : 'Collapse'}>
+            {collapsed ? '▶' : '◀'}
+          </button>
           {!collapsed && <span className="version">v0.5.0</span>}
         </div>
       </aside>
