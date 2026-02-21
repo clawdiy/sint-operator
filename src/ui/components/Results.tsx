@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { getRuns, getRun, normalizeRunPayload, isRunInProgress, cancelRun } from '../api';
+import { getRuns, getRun, deleteRun, normalizeRunPayload, isRunInProgress, cancelRun } from '../api';
 import { useToast } from './Toast';
 import Spinner from './Spinner';
 import ContentPreview from './ContentPreview';
@@ -207,6 +207,17 @@ export default function Results() {
   const parsed = selected ? parseRunOutputs(selected) : { deliverables: [], article: undefined, calendar: [] };
   const hasPreviewContent = parsed.deliverables.length > 0 || parsed.article || parsed.calendar.length > 0;
 
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Delete this run?')) return;
+    try {
+      await deleteRun(id);
+      setRuns(prev => prev.filter(r => r.id !== id));
+      if (selectedRun?.id === id) { setSelectedRun(null); setRunDetail(null); }
+    } catch {}
+  };
+
+
   return (
     <div className="page">
       <h1>Results</h1>
@@ -248,11 +259,16 @@ export default function Results() {
             <ul className="pipeline-list">
               {filteredRuns.map(r => (
                 <li key={r.id} className={`pipeline-item ${selected?.id === r.id ? 'active' : ''}`} onClick={() => viewRun(r.id)}>
-                  <strong>{r.pipelineId}</strong>
-                  <span className="pipeline-desc">
-                    <span className={`badge badge-${r.status}`}><span className="badge-dot" />{r.status}</span>
-                    {' '}{new Date(r.startedAt).toLocaleString()}
-                  </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <div>
+                      <strong>{r.pipelineId}</strong>
+                      <span className="pipeline-desc">
+                        <span className={`badge badge-${r.status}`}><span className="badge-dot" />{r.status}</span>
+                        {' '}{new Date(r.startedAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <button className="btn-icon" onClick={(e) => handleDelete(r.id, e)} title="Delete run" style={{ opacity: 0.4, fontSize: '14px', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '4px 8px' }}>🗑️</button>
+                  </div>
                 </li>
               ))}
             </ul>

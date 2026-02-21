@@ -287,3 +287,6 @@ export const getDeadLetterQueue = (filters?: { brandId?: string; limit?: number 
 
 export const retryDeadLetterItem = (id: string) =>
   request<{retried: boolean; item: any}>(`/api/publish/retry/${id}`, { method: 'POST' });
+
+export const deleteRun = (id: string) =>
+  request<{ ok: boolean }>(\`\${BASE}/api/runs/\${id}\`, { method: 'DELETE' });

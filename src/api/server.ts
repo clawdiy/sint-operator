@@ -1242,6 +1242,15 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
 
   // ─── Metering ───────────────────────────────────────────
 
+
+  app.delete('/api/runs/:id', (req, res) => {
+    const { id } = req.params;
+    const run = runStore.get(id);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    runStore.delete(id);
+    res.json({ ok: true });
+  });
+
   app.get('/api/usage', (req, res) => {
     const user = getRequestUser(req, res);
     if (!user) return;
