@@ -2986,3 +2986,12 @@ input:focus, textarea:focus, select:focus {
 }
 @keyframes toastSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes toastProgress { from { width: 100%; } to { width: 0%; } }
+
+
+/* Mobile: pipeline modal full screen */
+@media (max-width: 768px) {
+  .pipeline-modal-overlay { padding: 8px; }
+  .pipeline-modal { max-width: 100%; max-height: 95vh; border-radius: 12px; padding: 16px; }
+  .results-split { grid-template-columns: 1fr !important; }
+  .results-list-panel { position: static !important; max-height: none !important; }
+}
