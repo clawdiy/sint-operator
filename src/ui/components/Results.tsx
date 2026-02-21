@@ -9,6 +9,33 @@ const PLATFORM_ICONS: Record<string, string> = {
   threads: '🧵', tiktok: '🎵', blog: '📝', email: '✉️',
 };
 
+function extractDeliverablesFromObj(obj: any, deliverables: any[]) {
+  if (!obj || typeof obj !== 'object') return;
+  // Direct deliverables array
+  if (Array.isArray(obj.deliverables)) {
+    for (const d of obj.deliverables) {
+      if (d?.platform && d?.content && !deliverables.some(x => x.content === d.content && x.platform === d.platform)) {
+        deliverables.push(d);
+      }
+    }
+  }
+  // Platform-keyed format: { platforms: { twitter: { content: "..." } } }
+  if (obj.platforms && typeof obj.platforms === 'object') {
+    for (const [platform, val] of Object.entries(obj.platforms)) {
+      const v = val as any;
+      if (v?.content && !deliverables.some(x => x.content === v.content && x.platform === platform)) {
+        deliverables.push({ platform, content: v.content, format: v.format, hashtags: v.hashtags, hook: v.hook, mediaPrompt: v.mediaPrompt, notes: v.notes });
+      }
+    }
+  }
+  // Single content string with platform
+  if (obj.platform && obj.content && typeof obj.content === 'string') {
+    if (!deliverables.some(x => x.content === obj.content && x.platform === obj.platform)) {
+      deliverables.push({ platform: obj.platform, content: obj.content, format: obj.format, hashtags: obj.hashtags, hook: obj.hook, mediaPrompt: obj.mediaPrompt, notes: obj.notes });
+    }
+  }
+}
+
 function parseRunOutputs(run: any) {
   const deliverables: any[] = [];
   let article: any = undefined;
@@ -18,28 +45,22 @@ function parseRunOutputs(run: any) {
   const steps = run?.steps || [];
   for (const step of steps) {
     const out = step?.output || step?.result || {};
-    if (Array.isArray(out.deliverables)) deliverables.push(...out.deliverables);
-    if (out.article) article = out.article;
+    extractDeliverablesFromObj(out, deliverables);
+    if (out.article && !article) article = out.article;
     if (Array.isArray(out.calendar)) calendar.push(...out.calendar);
+  }
+
+  // Also check top-level output
+  if (run?.output) {
+    extractDeliverablesFromObj(run.output, deliverables);
+    if (run.output.article && !article) article = run.output.article;
+    if (Array.isArray(run.output.calendar)) calendar.push(...run.output.calendar);
   }
 
   // Also check top-level outputs array (already normalized)
   const outputs = run?.outputs || [];
   for (const o of outputs) {
-    if (o.platform && o.content) {
-      // Check if not already in deliverables
-      if (!deliverables.some(d => d.content === o.content && d.platform === o.platform)) {
-        deliverables.push({
-          platform: o.platform,
-          content: o.content,
-          format: o.format,
-          hashtags: o.hashtags,
-          hook: o.hook,
-          mediaPrompt: o.mediaPrompt,
-          notes: o.notes,
-        });
-      }
-    }
+    extractDeliverablesFromObj(o, deliverables);
   }
 
   return { deliverables, article, calendar };
@@ -243,7 +264,7 @@ export default function Results() {
           {selected ? (
             <>
               <div className="live-activity-header" style={{ marginBottom: '10px' }}>
-                <h3 style={{ margin: 0 }}>Run: {selected.id?.slice(0, 8)}</h3>
+                <h3 style={{ margin: 0 }}>{selected.pipelineId || 'Run'} — {new Date(selected.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, {new Date(selected.startedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</h3>
                 {isRunInProgress(selected.status) && (
                   <button className="btn danger small" onClick={handleCancelSelectedRun} disabled={canceling}>
                     {canceling ? 'Canceling…' : 'Cancel Run'}

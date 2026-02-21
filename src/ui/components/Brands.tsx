@@ -45,6 +45,17 @@ function TagInput({ tags, onChange, placeholder }: { tags: string[]; onChange: (
   );
 }
 
+
+const TEMPLATE_DISPLAY_NAMES: Record<string, string> = {
+  '[Your Firm Name]': 'B2B Professional Services',
+  '[Your Brand Name]': 'E-commerce / DTC Brand',
+  '[Your Name]': 'Personal Creator',
+  '[Your SaaS Name]': 'SaaS Startup',
+};
+function displayBrandName(name: string): string {
+  return TEMPLATE_DISPLAY_NAMES[name] || name;
+}
+
 const TONE_OPTIONS = [
   'professional', 'friendly', 'witty', 'authoritative', 'casual',
   'inspirational', 'educational', 'provocative', 'empathetic', 'bold',
@@ -187,7 +198,7 @@ export default function Brands() {
             brands.map(b => (
               <div key={b.id} className="brand-card card-clickable" onClick={() => viewBrand(b.id)}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div className="brand-card-name">{b.name}</div>
+                  <div className="brand-card-name">{displayBrandName(b.name)}</div>
                   {b.id?.startsWith('template-') && (
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: 'var(--info)', whiteSpace: 'nowrap' }}>Template</span>
                   )}
@@ -219,7 +230,7 @@ export default function Brands() {
       {selected && !showCreate && (
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0 }}>{selected.name}</h3>
+            <h3 style={{ margin: 0 }}>{displayBrandName(selected.name)}</h3>
             <button className="btn small" onClick={() => setSelected(null)}>← Back</button>
           </div>
 

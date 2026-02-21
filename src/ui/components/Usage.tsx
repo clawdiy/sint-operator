@@ -137,9 +137,35 @@ export default function Usage() {
       {current && (
         <div className="card">
           <h3>Current Session</h3>
-          <div className="result-box">
-            <pre>{JSON.stringify(current, null, 2)}</pre>
+          {/* TODO: If all values are zero, the issue may be backend metering not recording usage */}
+          <div className="card-grid" style={{ marginTop: '12px' }}>
+            <div className="card stat-card">
+              <div className="stat-icon">🏃</div>
+              <div className="stat-body">
+                <div className="stat-value">{current.runs ?? current.totalRuns ?? 0}</div>
+                <div className="stat-label">Session Runs</div>
+              </div>
+            </div>
+            <div className="card stat-card">
+              <div className="stat-icon">🪙</div>
+              <div className="stat-body">
+                <div className="stat-value">{(current.tokens ?? current.totalTokens ?? 0).toLocaleString()}</div>
+                <div className="stat-label">Tokens</div>
+              </div>
+            </div>
+            <div className="card stat-card">
+              <div className="stat-icon">💰</div>
+              <div className="stat-body">
+                <div className="stat-value">{(current.costUnits ?? current.totalCostUnits ?? 0).toFixed?.(1) ?? 0}</div>
+                <div className="stat-label">Credits</div>
+              </div>
+            </div>
           </div>
+          {current.limit && (
+            <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Limit: {typeof current.limit === 'object' ? `${current.limit.tokens?.toLocaleString() ?? '∞'} tokens / ${current.limit.runs ?? '∞'} runs` : String(current.limit)}
+            </div>
+          )}
         </div>
       )}
 

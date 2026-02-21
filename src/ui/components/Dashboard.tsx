@@ -258,7 +258,7 @@ export default function Dashboard({ onNavigate }: Props) {
           <div className="stat-icon">{health?.status === 'ok' ? '🟢' : '🔴'}</div>
           <div>
             <div className="stat-value">{health?.status === 'ok' ? 'Online' : 'Offline'}</div>
-            <div className="stat-label">System Health</div>
+            <div className="stat-label">Health</div>
           </div>
         </div>
         <div className="card stat-card">
