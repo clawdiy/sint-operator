@@ -1571,5 +1571,45 @@ app.get('/health', (_req, res) => {
     webhookStore.close();
   });
 
-  return { app, server };
+  
+    // Schedule runner — check every 60 seconds
+    setInterval(() => {
+      try {
+        const due = scheduleStore.getDue();
+        for (const sched of due) {
+          console.log(`[Scheduler] Running: ${sched.pipelineId}`);
+          const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          runStore.save({
+            id: runId, status: 'queued', pipelineId: sched.pipelineId,
+            brandId: sched.brandId, userId: sched.userId, startedAt: new Date().toISOString(),
+          });
+          
+          orchestrator.runPipeline(sched.pipelineId, sched.brandId, sched.inputs || {})
+            .then((result) => {
+              runStore.save({ id: runId, status: 'completed', pipelineId: sched.pipelineId,
+                brandId: sched.brandId, userId: sched.userId, startedAt: new Date().toISOString(),
+                completedAt: new Date().toISOString(), result });
+            })
+            .catch((err) => {
+              runStore.save({ id: runId, status: 'failed', pipelineId: sched.pipelineId,
+                brandId: sched.brandId, userId: sched.userId, startedAt: new Date().toISOString(),
+                completedAt: new Date().toISOString(), error: err.message });
+            });
+          
+          // Update schedule
+          scheduleStore.save({
+            ...sched,
+            lastRunAt: new Date().toISOString(),
+            enabled: !!sched.cronExpression,
+            nextRunAt: sched.cronExpression
+              ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Simple: +1 day
+              : sched.nextRunAt,
+          });
+        }
+      } catch (err) {
+        console.error('[Scheduler] Error:', err);
+      }
+    }, 60_000);
+
+    return { app, server };
 }
