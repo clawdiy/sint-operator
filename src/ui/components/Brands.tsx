@@ -228,7 +228,8 @@ export default function Brands() {
 
       {/* Brand Detail */}
       {selected && !showCreate && (
-        <div className="card">
+        <div className="pipeline-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}>
+          <div className="pipeline-modal" style={{ maxWidth: '700px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ margin: 0 }}>{displayBrandName(selected.name)}</h3>
             <button className="btn small" onClick={() => setSelected(null)}>← Back</button>
@@ -309,10 +310,11 @@ export default function Brands() {
 
       {/* Create Form */}
       {showCreate && (
-        <div className="card">
+        <div className="pipeline-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCreate(false); }}>
+          <div className="pipeline-modal">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <h3 style={{ margin: 0 }}>Create Brand</h3>
-            <button className="btn small" onClick={() => setShowCreate(false)}>← Cancel</button>
+            <button className="btn small" onClick={() => setShowCreate(false)}>✕ Close</button>
           </div>
 
           <div className="form-group">
@@ -403,6 +405,8 @@ export default function Brands() {
               {creating ? 'Creating...' : '✓ Create Brand'}
             </button>
             <button className="btn" onClick={() => setShowCreate(false)}>Cancel</button>
+          </div>
+        </div>
           </div>
         </div>
       )}

@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 
 interface Toast {
   id: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
   message: string;
   removing?: boolean;
 }
@@ -28,21 +28,25 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const addToast = useCallback((type: Toast['type'], message: string) => {
     const id = `toast-${++counterRef.current}`;
-    setToasts(prev => [...prev, { id, type, message }]);
-    setTimeout(() => removeToast(id), 4000);
+    setToasts(prev => {
+      const next = [...prev, { id, type, message }];
+      return next.slice(-3); // max 3 visible
+    });
+    setTimeout(() => removeToast(id), 5000);
   }, [removeToast]);
 
-  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  const icons: Record<string, string> = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
 
   return (
     <ToastContext.Provider value={{ addToast }}>
       {children}
       <div className="toast-container">
         {toasts.map(toast => (
-          <div key={toast.id} className={`toast toast-${toast.type} ${toast.removing ? 'removing' : ''}`}>
+          <div key={toast.id} className={`toast ${toast.type} ${toast.removing ? 'removing' : ''}`}>
             <span className="toast-icon">{icons[toast.type]}</span>
             <span className="toast-message">{toast.message}</span>
             <button className="toast-close" onClick={() => removeToast(toast.id)}>×</button>
+            <div className="toast-progress" />
           </div>
         ))}
       </div>
