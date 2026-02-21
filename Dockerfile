@@ -12,13 +12,23 @@ COPY . .
 # Build backend TypeScript
 RUN npx tsc --skipLibCheck || echo "⚠️ TSC failed but continuing"
 
+# Backup fallback UI before vite (emptyOutDir wipes src/ui/dist/)
+RUN cp -r src/ui/dist /tmp/ui-fallback 2>/dev/null || true
+
 # Build UI (Vite)
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN CI=true npm run ui:build 2>&1 || echo "⚠️ Vite build failed, using fallback"
 
-# Ensure ui-static exists
+# Ensure ui-static exists -- use vite output or fallback
 RUN mkdir -p dist/ui-static && \
-    (cp -r src/ui/dist/* dist/ui-static/ 2>/dev/null || echo "⚠️ No Vite output found")
+    if [ -f src/ui/dist/index.html ]; then \
+      cp -r src/ui/dist/* dist/ui-static/; \
+    elif [ -f /tmp/ui-fallback/index.html ]; then \
+      echo "Using fallback UI"; \
+      cp -r /tmp/ui-fallback/* dist/ui-static/; \
+    else \
+      echo "No UI available"; \
+    fi
 
 # ─── Stage 2: Production ─────────────────────────────────────
 FROM node:22-slim
