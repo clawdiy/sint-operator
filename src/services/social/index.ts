@@ -5,7 +5,6 @@
  * Handles: Twitter/X, LinkedIn (more to come: Instagram, Telegram, Discord)
  */
 
-import { resolve } from 'path';
 import { postTweet, postThread, isTwitterConfigured, type TweetResult, type ThreadResult } from './twitter.js';
 import { postLinkedInUpdate, postLinkedInArticle, isLinkedInConfigured, verifyLinkedInToken, type LinkedInPostResult } from './linkedin.js';
 import {
@@ -29,10 +28,6 @@ import {
   listQueueItems,
   updateQueueItem,
 } from './store.js';
-
-function ensurePublishStoreInitialized(): void {
-  initPublishStore(resolve(process.env.SINT_DATA_DIR ?? './data'));
-}
 
 /**
  * Initialize publish queue DB (called at API server startup).
@@ -176,7 +171,6 @@ export function queuePublish(
   scheduledAt?: string,
   options: { requiresApproval?: boolean } = {},
 ): PublishQueueItem {
-  ensurePublishStoreInitialized();
   const requiresApproval = options.requiresApproval === true;
   const status: PublishQueueStatus = requiresApproval ? 'pending_approval' : 'pending';
 
@@ -195,7 +189,6 @@ export function queuePublish(
  * Process pending items in the queue.
  */
 export async function processQueue(logger?: Logger): Promise<PublishResult[]> {
-  ensurePublishStoreInitialized();
   const now = new Date();
   const pending = listQueueItems({ status: 'pending' }).filter(item => {
     if (item.status !== 'pending') return false;
@@ -232,7 +225,6 @@ export async function processQueue(logger?: Logger): Promise<PublishResult[]> {
  * Get queue items.
  */
 export function getQueue(filters?: { status?: string; brandId?: string }): PublishQueueItem[] {
-  ensurePublishStoreInitialized();
   return listQueueItems(filters);
 }
 
@@ -240,7 +232,6 @@ export function getQueue(filters?: { status?: string; brandId?: string }): Publi
  * Cancel a queued item.
  */
 export function cancelQueueItem(id: string): boolean {
-  ensurePublishStoreInitialized();
   const item = getQueueItem(id);
   if (!item || (item.status !== 'pending' && item.status !== 'pending_approval')) return false;
   updateQueueItem(id, { status: 'cancelled' });
@@ -251,7 +242,6 @@ export function cancelQueueItem(id: string): boolean {
  * Approve a queued item that requires approval.
  */
 export function approveQueueItem(id: string, approvedBy: string = 'system'): PublishQueueItem | null {
-  ensurePublishStoreInitialized();
   const item = getQueueItem(id);
   if (!item || item.status !== 'pending_approval') return null;
   return updateQueueItem(id, {
@@ -266,7 +256,6 @@ export function approveQueueItem(id: string, approvedBy: string = 'system'): Pub
  * Reject a queued item that requires approval.
  */
 export function rejectQueueItem(id: string, reason?: string): PublishQueueItem | null {
-  ensurePublishStoreInitialized();
   const item = getQueueItem(id);
   if (!item || item.status !== 'pending_approval') return null;
   return updateQueueItem(id, {
@@ -279,7 +268,6 @@ export function rejectQueueItem(id: string, reason?: string): PublishQueueItem |
  * Get queue item by id.
  */
 export function getQueueItemById(id: string): PublishQueueItem | null {
-  ensurePublishStoreInitialized();
   return getQueueItem(id);
 }
 
@@ -287,7 +275,6 @@ export function getQueueItemById(id: string): PublishQueueItem | null {
  * Get queue summary counters by status.
  */
 export function getQueueSummary(brandId?: string): Record<PublishQueueStatus, number> {
-  ensurePublishStoreInitialized();
   const summary: Record<PublishQueueStatus, number> = {
     pending: 0,
     pending_approval: 0,

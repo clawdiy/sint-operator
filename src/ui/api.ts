@@ -243,6 +243,50 @@ export const getPublishPlatformStatus = (verify = false) =>
     verify ? '/api/publish/status?verify=true' : '/api/publish/status',
   );
 
+export interface PublishQueueItemPayload {
+  id: string;
+  request: PublishRequestPayload;
+  brandId: string;
+  runId?: string;
+  scheduledAt?: string;
+  status: 'pending' | 'pending_approval' | 'published' | 'failed' | 'cancelled';
+  result?: PublishResultPayload;
+  requiresApproval: boolean;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const queuePublishContent = (payload: {
+  request: PublishRequestPayload;
+  brandId: string;
+  runId?: string;
+  scheduledAt?: string;
+  requiresApproval?: boolean;
+}) =>
+  request<PublishQueueItemPayload>('/api/publish/queue', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const processPublishQueue = () =>
+  request<{ processed: number; results: PublishResultPayload[]; summary: Record<string, number> }>(
+    '/api/publish/process',
+    { method: 'POST' },
+  );
+
+export const getPublishQueue = (filters?: { status?: string; brandId?: string }) => {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.brandId) params.set('brandId', filters.brandId);
+  const query = params.toString();
+  return request<{ items: PublishQueueItemPayload[]; total: number; summary?: Record<string, number> }>(
+    query ? `/api/publish/queue?${query}` : '/api/publish/queue',
+  );
+};
+
 // Usage
 export const getUsage = (days?: number) => request<{
   period: string; totalRuns: number; totalTokens: number; totalCostUnits: number;

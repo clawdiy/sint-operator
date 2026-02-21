@@ -6,6 +6,9 @@ import {
   isRunInProgress,
   cancelRun,
   publishContent,
+  queuePublishContent,
+  processPublishQueue,
+  getPublishQueue,
   getPublishPlatformStatus,
 } from '../api';
 import { useToast } from './Toast';
@@ -37,6 +40,8 @@ export default function Results() {
   const [canceling, setCanceling] = useState(false);
   const [publishingKey, setPublishingKey] = useState('');
   const [publishPlatforms, setPublishPlatforms] = useState<Record<string, boolean>>({});
+  const [queueSummary, setQueueSummary] = useState<Record<string, number>>({});
+  const [queueActionBusy, setQueueActionBusy] = useState(false);
 
   const refreshRuns = useCallback(async () => {
     setRefreshing(true);
@@ -69,6 +74,19 @@ export default function Results() {
     }
   }, []);
 
+  const refreshQueueSummary = useCallback(async (brandId?: string) => {
+    if (!brandId) {
+      setQueueSummary({});
+      return;
+    }
+    try {
+      const data = await getPublishQueue({ brandId });
+      setQueueSummary(data.summary ?? {});
+    } catch {
+      setQueueSummary({});
+    }
+  }, []);
+
   const filteredRuns = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return runs.filter(run => {
@@ -90,6 +108,10 @@ export default function Results() {
   useEffect(() => {
     void refreshPublishStatus();
   }, [refreshPublishStatus]);
+
+  useEffect(() => {
+    void refreshQueueSummary(selected?.brandId);
+  }, [selected?.brandId, refreshQueueSummary]);
 
   const viewRun = async (id: string) => {
     try {
@@ -221,6 +243,81 @@ export default function Results() {
     } finally {
       setPublishingKey('');
       void refreshPublishStatus();
+      void refreshQueueSummary(selected?.brandId);
+    }
+  };
+
+  const handleQueueOutput = async (out: any, key: string, requiresApproval: boolean) => {
+    if (!selected?.brandId) {
+      addToast('error', 'Select a run with a brand before queuing publish');
+      return;
+    }
+
+    const sourcePlatform = String(out?.platform ?? '');
+    const platform = PUBLISH_PLATFORM_ALIASES[sourcePlatform] ?? sourcePlatform;
+    if (!DIRECT_PUBLISH_PLATFORMS.has(platform)) {
+      addToast('error', `Queue is not supported for ${sourcePlatform}`);
+      return;
+    }
+
+    const content = String(out?.content ?? '').trim();
+    if (!content) {
+      addToast('error', 'Output is empty and cannot be queued');
+      return;
+    }
+
+    if (publishPlatforms[platform] === false) {
+      addToast('error', `${platform} is not configured in server credentials`);
+      return;
+    }
+
+    const media = Array.isArray(out?.media)
+      ? out.media.filter((entry: unknown): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+      : undefined;
+    if (platform === 'instagram' && (!media || media.length === 0)) {
+      addToast('error', 'Instagram queuing requires at least one media URL');
+      return;
+    }
+
+    setPublishingKey(key);
+    try {
+      const item = await queuePublishContent({
+        request: {
+          platform,
+          content,
+          hashtags: extractHashtags(content),
+          media,
+        },
+        brandId: selected.brandId,
+        runId: selected.id,
+        requiresApproval,
+      });
+      const msg = item.status === 'pending_approval'
+        ? `Queued for approval (${platform})`
+        : `Queued for publish (${platform})`;
+      addToast('success', msg);
+    } catch (err: any) {
+      addToast('error', err?.message || `Failed to queue ${platform} publish`);
+    } finally {
+      setPublishingKey('');
+      void refreshQueueSummary(selected?.brandId);
+    }
+  };
+
+  const handleProcessQueue = async () => {
+    setQueueActionBusy(true);
+    try {
+      const result = await processPublishQueue();
+      if (result.processed > 0) {
+        addToast('success', `Processed ${result.processed} queued publishes`);
+      } else {
+        addToast('info', 'No pending queue items to process');
+      }
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to process publish queue');
+    } finally {
+      setQueueActionBusy(false);
+      void refreshQueueSummary(selected?.brandId);
     }
   };
 
@@ -334,6 +431,11 @@ export default function Results() {
               {selected.outputs && selected.outputs.length > 0 && (
                 <div className="export-bar">
                   <span className="export-bar-label">Export Results</span>
+                  <span className="badge">Queued {queueSummary.pending ?? 0}</span>
+                  <span className="badge">Needs approval {queueSummary.pending_approval ?? 0}</span>
+                  <button className="btn small" onClick={() => void handleProcessQueue()} disabled={queueActionBusy}>
+                    {queueActionBusy ? 'Processing queue…' : '▶ Process Queue'}
+                  </button>
                   <button className="btn small" onClick={exportMarkdown}>📄 Markdown</button>
                   <button className="btn small" onClick={exportJSON}>📦 JSON</button>
                 </div>
@@ -383,11 +485,13 @@ export default function Results() {
                     const isConfigured = publishPlatforms[publishPlatform];
                     const hasInstagramMedia = publishPlatform !== 'instagram' || (Array.isArray(out.media) && out.media.length > 0);
                     const publishDisabled =
+                      queueActionBusy ||
                       publishingKey !== '' ||
                       !canDirectPublish ||
                       isConfigured === false ||
                       !hasInstagramMedia ||
                       String(out.content || '').trim().length === 0;
+                    const queueDisabled = publishDisabled;
                     let publishTitle = `Publish to ${publishPlatform}`;
                     if (!canDirectPublish) publishTitle = `Publishing not available for ${sourcePlatform}`;
                     if (isConfigured === false) publishTitle = `${publishPlatform} is not configured`;
@@ -406,6 +510,14 @@ export default function Results() {
                                 {charCount}/{limit}
                               </span>
                             )}
+                            <button
+                              className="btn small"
+                              onClick={() => void handleQueueOutput(out, `queue-${i}`, true)}
+                              disabled={queueDisabled}
+                              title={publishTitle}
+                            >
+                              {publishingKey === `queue-${i}` ? 'Queuing…' : '🕒 Queue Approval'}
+                            </button>
                             <button
                               className="btn small"
                               onClick={() => void handlePublishOutput(out, `publish-${i}`)}
