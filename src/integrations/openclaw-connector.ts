@@ -93,7 +93,11 @@ export function createOpenClawRoutes(config: OpenClawConnectorConfig): Router {
     if (config.secret) {
       const provided = req.headers['x-openclaw-secret'] ?? req.headers['authorization']?.replace('Bearer ', '');
       if (provided !== config.secret) {
-        res.status(401).json({ success: false, error: 'Unauthorized' } satisfies OpenClawResponse);
+        res.status(401).json({
+          success: false,
+          message: 'Unauthorized',
+          error: 'Unauthorized',
+        } satisfies OpenClawResponse);
         return;
       }
     }
@@ -101,11 +105,15 @@ export function createOpenClawRoutes(config: OpenClawConnectorConfig): Router {
   });
 
   // Main webhook endpoint
-  router.post('/openclaw', async (req: Request, res: Response) => {
+  const handleOpenClawCommand = async (req: Request, res: Response): Promise<void> => {
     try {
       const cmd = req.body as OpenClawCommand;
       if (!cmd.message) {
-        res.status(400).json({ success: false, error: 'Missing message field' } satisfies OpenClawResponse);
+        res.status(400).json({
+          success: false,
+          message: 'Invalid command payload',
+          error: 'Missing message field',
+        } satisfies OpenClawResponse);
         return;
       }
 
@@ -136,12 +144,20 @@ export function createOpenClawRoutes(config: OpenClawConnectorConfig): Router {
       } satisfies OpenClawResponse);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      res.status(500).json({ success: false, error: message } satisfies OpenClawResponse);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to process OpenClaw command',
+        error: message,
+      } satisfies OpenClawResponse);
     }
-  });
+  };
+  // Primary path when mounted at /api/webhooks/openclaw
+  router.post('/', handleOpenClawCommand);
+  // Backward compatibility for older clients targeting /openclaw
+  router.post('/openclaw', handleOpenClawCommand);
 
   // Health check
-  router.get('/openclaw/status', (_req: Request, res: Response) => {
+  const handleStatus = (_req: Request, res: Response): void => {
     res.json({
       success: true,
       message: 'OpenClaw connector active',
@@ -149,7 +165,9 @@ export function createOpenClawRoutes(config: OpenClawConnectorConfig): Router {
         pipelines: INTENT_PATTERNS.map((p) => p.pipeline),
       },
     });
-  });
+  };
+  router.get('/status', handleStatus);
+  router.get('/openclaw/status', handleStatus);
 
   return router;
 }

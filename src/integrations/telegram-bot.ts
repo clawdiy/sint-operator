@@ -279,10 +279,10 @@ export function initTelegramBot(orchestrator: Orchestrator): TelegramBot | null 
 
         try {
           const result = await orchestratorRef!.runPipeline(state.pipelineId, brandId, {});
-          const res = result as Record<string, unknown>;
-          const outputCount = Array.isArray(res?.steps)
-            ? (res.steps as any[]).reduce((acc, s) => acc + (Array.isArray(s?.output?.deliverables) ? s.output.deliverables.length : 0), 0)
-            : 0;
+          const outputCount = result.steps.reduce((acc, step) => {
+            const output = step.output as { deliverables?: unknown[] } | undefined;
+            return acc + (Array.isArray(output?.deliverables) ? output.deliverables.length : 0);
+          }, 0);
 
           await bot!.sendMessage(chatId,
             `✅ *Pipeline Complete*\n\n` +

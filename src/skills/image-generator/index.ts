@@ -62,9 +62,11 @@ export const imageGeneratorSkill: Skill = {
           quality: quality as 'standard' | 'hd',
           style: style as 'vivid' | 'natural',
         });
+        const firstImage = Array.isArray(response.data) ? response.data[0] : undefined;
         results.push({
-          url: response.data[0]?.url,
-          revisedPrompt: response.data[0]?.revised_prompt,
+          url: firstImage?.url,
+          revisedPrompt: firstImage?.revised_prompt,
+          ...(firstImage ? {} : { error: 'No image returned by provider' }),
         });
         ctx.logger.info(`Image ${i + 1}/${count} generated successfully`);
       } catch (err: any) {
