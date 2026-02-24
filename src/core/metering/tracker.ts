@@ -52,6 +52,8 @@ export class MeteringTracker {
 
       INSERT OR IGNORE INTO usage_limits (id) VALUES ('default');
     `);
+    // Migrate existing DBs with low default limits
+    this.db.exec(`UPDATE usage_limits SET daily_cost_limit = 50000.0, daily_run_limit = 10000 WHERE id = 'default' AND daily_cost_limit <= 100.0`);
   }
 
   // ─── Recording ──────────────────────────────────────────
