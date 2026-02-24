@@ -77,7 +77,22 @@ function parseRunOutputs(run: any) {
     extractDeliverablesFromObj(o, deliverables);
   }
 
-  return { deliverables, article, calendar };
+  // Extract generated images from steps
+  let images: any[] = [];
+  let publishQueue: any[] = [];
+  for (const step of steps) {
+    const out = step?.output || step?.result || {};
+    if (out.images && Array.isArray(out.images)) {
+      images.push(...out.images);
+    }
+    if (out.publish_queue && Array.isArray(out.publish_queue)) {
+      publishQueue.push(...out.publish_queue);
+    }
+  }
+  if (run?.output?.images) images.push(...(Array.isArray(run.output.images) ? run.output.images : []));
+  if (run?.output?.publish_queue) publishQueue.push(...(Array.isArray(run.output.publish_queue) ? run.output.publish_queue : []));
+
+  return { deliverables, article, calendar, images, publishQueue };
 }
 
 export default function Results() {
@@ -218,7 +233,7 @@ export default function Results() {
 
   if (loading) return <Spinner text="Loading results..." />;
 
-  const parsed = selected ? parseRunOutputs(selected) : { deliverables: [], article: undefined, calendar: [] };
+  const parsed = selected ? parseRunOutputs(selected) : { deliverables: [], article: undefined, calendar: [], images: [], publishQueue: [] };
   const hasPreviewContent = parsed.deliverables.length > 0 || parsed.article || parsed.calendar.length > 0;
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -345,6 +360,8 @@ export default function Results() {
                   deliverables={parsed.deliverables}
                   article={parsed.article}
                   calendar={parsed.calendar}
+                  images={parsed.images}
+                  publishQueue={parsed.publishQueue}
                   onEdit={handleEditDeliverable}
                 />
               )}

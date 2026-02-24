@@ -26,10 +26,28 @@ interface CalendarDay {
   posts: Array<{ platform: string; content: string; time?: string; hashtags?: string[] }>;
 }
 
+interface GeneratedImage {
+  url?: string;
+  base64?: string;
+  revisedPrompt?: string;
+  error?: string;
+}
+
+interface PublishJob {
+  id: string;
+  platform: string;
+  content: string;
+  scheduledAt: string;
+  imageUrl?: string;
+  status: string;
+}
+
 interface ContentPreviewProps {
   deliverables: Deliverable[];
   article?: Article;
   calendar?: CalendarDay[];
+  images?: GeneratedImage[];
+  publishQueue?: PublishJob[];
   onPublish?: (platform: string, content: string) => void;
   onEdit?: (index: number, newContent: string) => void;
 }
@@ -253,7 +271,7 @@ function CalendarPreview({ calendar }: { calendar: CalendarDay[] }) {
   );
 }
 
-export default function ContentPreview({ deliverables, article, calendar, onPublish, onEdit }: ContentPreviewProps) {
+export default function ContentPreview({ deliverables, article, calendar, images, publishQueue, onPublish, onEdit }: ContentPreviewProps) {
   const [copiedId, setCopiedId] = useState('');
 
   const copyToClipboard = (text: string, id: string) => {
@@ -299,6 +317,7 @@ export default function ContentPreview({ deliverables, article, calendar, onPubl
                     onClick={() => copyToClipboard(d.content, `d-${i}`)}>
                     {copiedId === `d-${i}` ? '✅ Copied!' : '📋 Copy'}
                   </button>
+                  <PublishButton platform={platform} content={d.content} hashtags={d.hashtags} />
                 </div>
               </div>
             );
@@ -306,10 +325,79 @@ export default function ContentPreview({ deliverables, article, calendar, onPubl
         </div>
       )}
 
+      {images && images.length > 0 && (
+        <div className="preview-section">
+          <h4 className="preview-section-title">🖼️ Generated Images</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 16 }}>
+            {images.filter(img => img.url && !img.error).map((img, i) => (
+              <div key={i} style={{ background: '#1a1a2e', borderRadius: 12, overflow: 'hidden', border: '1px solid #2a2a4a' }}>
+                <img 
+                  src={img.url} 
+                  alt={img.revisedPrompt || 'Generated image'} 
+                  style={{ width: '100%', height: 250, objectFit: 'cover', display: 'block' }}
+                  loading="lazy"
+                />
+                {img.revisedPrompt && (
+                  <div style={{ padding: '8px 12px', fontSize: 12, color: '#94a3b8', lineHeight: 1.4 }}>
+                    {img.revisedPrompt.slice(0, 120)}{img.revisedPrompt.length > 120 ? '...' : ''}
+                  </div>
+                )}
+                <div style={{ padding: '8px 12px', display: 'flex', gap: 8 }}>
+                  <a href={img.url} target="_blank" rel="noopener noreferrer" className="btn small" style={{ textDecoration: 'none' }}>
+                    🔗 Open
+                  </a>
+                  <button className="btn small" onClick={() => { navigator.clipboard.writeText(img.url || ''); }}>
+                    📋 Copy URL
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {calendar && calendar.length > 0 && (
         <div className="preview-section">
           <h4 className="preview-section-title">📅 Content Calendar</h4>
           <CalendarPreview calendar={calendar} />
+        </div>
+      )}
+
+      {publishQueue && publishQueue.length > 0 && (
+        <div className="preview-section">
+          <h4 className="preview-section-title">📤 Publish Queue</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {publishQueue.map((job, i) => (
+              <div key={i} style={{ 
+                background: '#1a1a2e', borderRadius: 8, padding: '12px 16px', 
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                borderLeft: '3px solid ' + (PLATFORM_COLORS[job.platform] || '#6366f1')
+              }}>
+                <div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                    <span className="badge">{job.platform}</span>
+                    <span style={{ 
+                      fontSize: 11, padding: '2px 8px', borderRadius: 999,
+                      background: job.status === 'queued' ? '#22c55e22' : job.status === 'pending_approval' ? '#eab30822' : '#6366f122',
+                      color: job.status === 'queued' ? '#22c55e' : job.status === 'pending_approval' ? '#eab308' : '#6366f1',
+                    }}>{job.status}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                    📅 {new Date(job.scheduledAt).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                    {job.content.slice(0, 80)}{job.content.length > 80 ? '...' : ''}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {job.imageUrl && (
+                    <img src={job.imageUrl} alt="" style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover' }} />
+                  )}
+                  <PublishButton platform={job.platform} content={job.content} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
