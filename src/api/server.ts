@@ -955,18 +955,17 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     const { brandId, ...inputs } = req.body;
     if (!brandId) return res.status(400).json({ error: 'brandId is required' });
     
-    // Use content-repurpose pipeline with template-specific prompt
-    const content = Object.entries(inputs).map(([k, v]) => \`\${k}: \${v}\`).join('\n');
-    const runId = enqueueAsyncRun(
+    // Use content-repurpose pipeline with template-specific prompt.
+    const content = Object.entries(inputs).map(([k, v]) => `${k}: ${String(v)}`).join('\n');
+    const prompt = `Template: ${template.name}\n${content}`;
+    const asyncRun = enqueueAsyncRun(
       'content-repurpose',
       brandId,
-      user,
-      \`Template: \${template.name}\n\${content}\`,
-      { target_platforms: template.platforms },
-      orchestrator
+      user.userId,
+      () => orchestrator.repurposeContent(brandId, prompt, template.platforms),
     );
     
-    res.json({ runId, template: template.id, status: 'queued' });
+    res.json({ runId: asyncRun.id, template: template.id, status: asyncRun.status });
   });
 
 
@@ -1040,24 +1039,24 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
     if (!brand) return res.status(404).json({ error: 'Brand not found' });
     
     try {
-      const result = await orchestrator.llm.completeJSON<{ variants: Array<{ content: string; hook: string; angle: string; tone: string }> }>(
-        \`Generate \${variantCount} distinctly different versions of this content for \${platform}.
+      const result = await orchestrator.getLLM().completeJSON<{ variants: Array<{ content: string; hook: string; angle: string; tone: string }> }>(
+        `Generate ${variantCount} distinctly different versions of this content for ${platform}.
 
-Brand: \${brand.name}
-Voice: \${JSON.stringify(brand.voice || {})}
+Brand: ${brand.name}
+Voice: ${JSON.stringify(brand.voice || {})}
 
-Source content: \${content.slice(0, 5000)}
+Source content: ${content.slice(0, 5000)}
 
 Each variant must use a COMPLETELY different:
 - Hook (opening line)
 - Angle (perspective/approach)  
 - Tone (within brand guidelines)
 
-Platform: \${platform}
-\${platform === 'twitter' ? 'Max 280 chars per variant.' : ''}
-\${platform === 'linkedin' ? 'Max 3000 chars per variant.' : ''}
+Platform: ${platform}
+${platform === 'twitter' ? 'Max 280 chars per variant.' : ''}
+${platform === 'linkedin' ? 'Max 3000 chars per variant.' : ''}
 
-Respond with JSON: { "variants": [{ "content": "full post text", "hook": "the hook used", "angle": "the angle", "tone": "tone description" }] }\`,
+Respond with JSON: { "variants": [{ "content": "full post text", "hook": "the hook used", "angle": "the angle", "tone": "tone description" }] }`,
         { type: 'object' },
         { tier: 'complex', maxTokens: 4096 }
       );

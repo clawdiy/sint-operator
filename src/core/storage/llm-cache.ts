@@ -11,7 +11,7 @@ export class LLMCache {
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
-    this.db.exec(\`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS llm_cache (
         cache_key TEXT PRIMARY KEY,
         model TEXT NOT NULL,
@@ -22,7 +22,7 @@ export class LLMCache {
         expires_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_cache_expires ON llm_cache(expires_at);
-    \`);
+    `);
   }
 
   private makeKey(prompt: string, model: string): string {
@@ -40,10 +40,10 @@ export class LLMCache {
   set(prompt: string, model: string, response: string, tokens: number, ttlHours: number = 24): void {
     const key = this.makeKey(prompt, model);
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
-    this.db.prepare(\`
+    this.db.prepare(`
       INSERT OR REPLACE INTO llm_cache (cache_key, model, prompt_hash, response, tokens_saved, expires_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    \`).run(key, model, key.slice(0, 16), response, tokens, expiresAt);
+    `).run(key, model, key.slice(0, 16), response, tokens, expiresAt);
   }
 
   getStats(): { entries: number; tokensSaved: number } {

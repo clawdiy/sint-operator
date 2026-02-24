@@ -1,5 +1,4 @@
 import Database from 'better-sqlite3';
-import { join } from 'path';
 
 export interface ScheduledRun {
   id: string;
@@ -38,10 +37,10 @@ export class ScheduleStore {
   }
 
   save(schedule: ScheduledRun): void {
-    this.db.prepare(\`
+    this.db.prepare(`
       INSERT OR REPLACE INTO schedules (id, pipeline_id, brand_id, inputs, cron_expression, next_run_at, last_run_at, enabled, user_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    \`).run(
+    `).run(
       schedule.id, schedule.pipelineId, schedule.brandId,
       JSON.stringify(schedule.inputs), schedule.cronExpression || null,
       schedule.nextRunAt, schedule.lastRunAt || null,
