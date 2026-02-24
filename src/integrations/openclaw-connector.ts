@@ -66,7 +66,7 @@ const INTENT_PATTERNS: Array<{ pattern: RegExp; pipeline: string; extractInputs:
   },
 ];
 
-function matchIntent(cmd: OpenClawCommand): IntentMatch | null {
+export function matchOpenClawIntent(cmd: OpenClawCommand): IntentMatch | null {
   for (const { pattern, pipeline, extractInputs } of INTENT_PATTERNS) {
     const match = cmd.message.match(pattern);
     if (match) {
@@ -117,7 +117,7 @@ export function createOpenClawRoutes(config: OpenClawConnectorConfig): Router {
         return;
       }
 
-      const intent = matchIntent(cmd);
+      const intent = matchOpenClawIntent(cmd);
       if (!intent) {
         res.json({
           success: false,

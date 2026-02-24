@@ -51,6 +51,17 @@ describe('server routing and rate-limit helpers', () => {
     expect(getRateLimitKey(req)).toBe(`user:${user.id}`);
   });
 
+  it('prefers authenticated request user for rate-limit key', () => {
+    const req = {
+      ip: '203.0.113.10',
+      user: { userId: 'auth-user-1', email: 'auth@example.com' },
+      query: {},
+      header: () => undefined,
+    } as any;
+
+    expect(getRateLimitKey(req)).toBe('user:auth-user-1');
+  });
+
   it('uses user id as rate-limit key when token is in query string', () => {
     const { user, token } = signup('rl-query@example.com', 'strongpass123', 'Rate Limit Query');
     const req = {
@@ -70,6 +81,16 @@ describe('server routing and rate-limit helpers', () => {
     } as any;
 
     expect(getRateLimitKey(req)).toBe('ip:203.0.113.7');
+  });
+
+  it('falls back to IP rate-limit key when bearer token is invalid', () => {
+    const req = {
+      ip: '203.0.113.11',
+      query: {},
+      header: (name: string) => (name === 'Authorization' ? 'Bearer invalid-token' : undefined),
+    } as any;
+
+    expect(getRateLimitKey(req)).toBe('ip:203.0.113.11');
   });
 
   it('bypasses API auth for public routes and webhook POST only', () => {

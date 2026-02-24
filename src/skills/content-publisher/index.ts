@@ -20,6 +20,7 @@ interface PublishJob {
 }
 
 export const contentPublisherSkill: Skill = {
+  id: 'content-publisher',
   name: 'content-publisher',
   description: 'Queue content for publishing across platforms with scheduling and approval support',
   version: '1.0.0',
@@ -144,6 +145,8 @@ export const contentPublisherSkill: Skill = {
       },
       tokensUsed: 0,
       costUnits: 2,
+      modelUsed: 'internal',
+      durationMs: Date.now() - start,
     };
   },
 };
