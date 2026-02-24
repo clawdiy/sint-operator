@@ -49,9 +49,75 @@ function PipelineSteps({ steps, streamSteps, running, result }: {
   running: boolean;
   result: any;
 }) {
+  const [expandedStep, setExpandedStep] = useState<string | null>(null);
   const completedIds = new Set(streamSteps.filter(s => s.type === 'step_complete').map(s => s.data?.step || s.data?.name));
   const activeStep = streamSteps.length > 0 ? streamSteps[streamSteps.length - 1] : null;
   const activeId = activeStep && activeStep.type !== 'step_complete' ? (activeStep.data?.step || activeStep.data?.name) : null;
+
+  // Get step output from result
+  const getStepOutput = (stepId: string) => {
+    if (!result) return null;
+    const runSteps = result.steps || [];
+    const match = runSteps.find((s: any) => s.stepId === stepId || s.id === stepId);
+    return match?.output || match?.result || null;
+  };
+
+  // Render step output content
+  const renderOutput = (output: any) => {
+    if (!output) return <div style={{ color: '#64748b', fontSize: 13, padding: 12 }}>No output data</div>;
+    
+    // Check for images
+    const images = output.images || [];
+    const hasImages = Array.isArray(images) && images.length > 0;
+    
+    return (
+      <div style={{ padding: '12px 0' }}>
+        {hasImages && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 8 }}>🖼️ Generated Images</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+              {images.filter((img: any) => img.url).map((img: any, i: number) => (
+                <a key={i} href={img.url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                  <img src={img.url} alt={img.revisedPrompt || ''} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 8, border: '1px solid #2a2a4a' }} loading="lazy" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+        {output.summary && (
+          <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+            {typeof output.summary === 'string' ? output.summary : JSON.stringify(output.summary, null, 2)}
+          </div>
+        )}
+        {output.deliverables && Array.isArray(output.deliverables) && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 8 }}>📦 {output.deliverables.length} deliverables</div>
+            {output.deliverables.slice(0, 3).map((d: any, i: number) => (
+              <div key={i} style={{ background: '#0f0f1a', borderRadius: 8, padding: '10px 14px', marginBottom: 6, borderLeft: '3px solid #6366f1' }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                  {d.platform && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: '#6366f122', color: '#6366f1', fontWeight: 600 }}>{d.platform}</span>}
+                  {d.format && <span style={{ fontSize: 11, color: '#64748b' }}>{d.format}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'pre-wrap' }}>{(d.content || '').slice(0, 200)}{(d.content || '').length > 200 ? '...' : ''}</div>
+              </div>
+            ))}
+            {output.deliverables.length > 3 && <div style={{ fontSize: 12, color: '#64748b' }}>+ {output.deliverables.length - 3} more...</div>}
+          </div>
+        )}
+        {output.publish_queue && Array.isArray(output.publish_queue) && (
+          <div style={{ fontSize: 13, color: '#22c55e' }}>📤 {output.publish_queue.length} posts queued for publishing</div>
+        )}
+        {output.calendar && (
+          <div style={{ fontSize: 13, color: '#6366f1' }}>📅 Calendar created with scheduled posts</div>
+        )}
+        {!hasImages && !output.summary && !output.deliverables && !output.publish_queue && (
+          <pre style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto', background: '#0f0f1a', padding: 12, borderRadius: 8 }}>
+            {JSON.stringify(output, null, 2).slice(0, 2000)}
+          </pre>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="pipeline-flow">
@@ -59,16 +125,36 @@ function PipelineSteps({ steps, streamSteps, running, result }: {
         const isDone = result || completedIds.has(step.id) || completedIds.has(step.skill);
         const isActive = running && !isDone && (activeId === step.id || activeId === step.skill || (i === 0 && running && streamSteps.length === 0));
         const statusClass = isDone ? 'step-done' : isActive ? 'step-active' : 'step-pending';
+        const isExpanded = expandedStep === step.id;
+        const stepOutput = getStepOutput(step.id);
+        const hasOutput = isDone && (result || stepOutput);
 
         return (
           <React.Fragment key={step.id}>
             {i > 0 && <div className="step-connector">→</div>}
-            <div className={`pipeline-step ${statusClass}`}>
+            <div 
+              className={`pipeline-step ${statusClass}`}
+              style={{ cursor: hasOutput ? 'pointer' : 'default' }}
+              onClick={() => hasOutput && setExpandedStep(isExpanded ? null : step.id)}
+            >
               <div className="pipeline-step-icon">{getSkillIcon(step.skill)}</div>
               <div className="pipeline-step-name">{step.skill.replace(/-/g, ' ')}</div>
               {step.action && <div className="pipeline-step-desc">{step.action.slice(0, 60)}...</div>}
-              {isDone && result && <div className="pipeline-step-link">View output ↗</div>}
+              {hasOutput && (
+                <div className="pipeline-step-link" style={{ color: '#22c55e', cursor: 'pointer', fontWeight: 600 }}>
+                  {isExpanded ? '▼ Hide output' : '▶ View output'}
+                </div>
+              )}
+              {isActive && <div style={{ color: '#eab308', fontSize: 12, marginTop: 4 }}>⏳ Running...</div>}
             </div>
+            {isExpanded && stepOutput && (
+              <div style={{ 
+                width: '100%', background: '#1a1a2e', borderRadius: 8, padding: '8px 16px',
+                marginTop: -8, marginBottom: 8, border: '1px solid #2a2a4a', maxHeight: 400, overflow: 'auto'
+              }}>
+                {renderOutput(stepOutput)}
+              </div>
+            )}
           </React.Fragment>
         );
       })}
