@@ -9,6 +9,7 @@
  */
 
 import { buildBrandContext } from '../../core/brand/manager.js';
+import { generateImage } from '../../services/image-gen/index.js';
 import type { Skill, SkillContext, SkillResult, Platform, ContentFormat } from '../../core/types.js';
 
 interface RepurposeOutput {
@@ -186,8 +187,19 @@ Respond ONLY with valid JSON:
       maxTokens: 8192,
     });
 
-    // Store in memory
+    // Generate images for deliverables with mediaPrompt
     const deliverables = Array.isArray(result.data.deliverables) ? result.data.deliverables : [];
+    for (const d of deliverables) {
+      if (d.mediaPrompt && process.env.OPENAI_API_KEY) {
+        try {
+          const [img] = await generateImage({ prompt: d.mediaPrompt, size: '1024x1024' });
+          (d as any).generatedImageUrl = img?.url;
+          (d as any).generatedImageBase64 = img?.base64;
+        } catch { /* image gen optional */ }
+      }
+    }
+
+    // Store in memory
     await ctx.memory.store('repurpose', `run-${Date.now()}`, text.slice(0, 500), {
       platforms,
       outputCount: deliverables.length,

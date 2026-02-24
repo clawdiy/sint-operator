@@ -7,6 +7,7 @@
  */
 
 import { buildBrandContext } from '../../core/brand/manager.js';
+import { generateImage } from '../../services/image-gen/index.js';
 import type { Skill, SkillContext, SkillResult } from '../../core/types.js';
 
 interface LinkedInOutput {
@@ -91,6 +92,18 @@ Respond ONLY with valid JSON:
       { type: 'object' },
       { tier: 'routine', maxTokens: 4096 }
     );
+
+    // Generate header images for each post if OpenAI key available
+    const posts = result.data.posts ?? [];
+    for (const post of posts) {
+      if (process.env.OPENAI_API_KEY) {
+        try {
+          const imagePrompt = `Professional LinkedIn header image for a post about: ${post.theme}. Clean, modern, minimalist design. No text overlay.`;
+          const [img] = await generateImage({ prompt: imagePrompt, size: '1792x1024', style: 'natural' });
+          (post as any).headerImageUrl = img?.url;
+        } catch { /* image gen optional */ }
+      }
+    }
 
     return {
       output: { ...result.data } as Record<string, unknown>,
