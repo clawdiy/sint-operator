@@ -13,6 +13,7 @@ import Approvals from './components/Approvals';
 import ErrorBoundary from './components/ErrorBoundary';
 import Onboarding from './components/Onboarding';
 import Auth from './components/Auth';
+import Landing from './components/Landing';
 import { ToastProvider } from './components/Toast';
 import { clearAuthToken } from './api';
 
@@ -28,6 +29,7 @@ export default function App() {
   const [page, setPage] = useState<Page>(getPageFromHash);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [authed, setAuthed] = useState(() => !!localStorage.getItem('sint_auth_token'));
+  const [showAuth, setShowAuth] = useState(false);
 
   React.useEffect(() => {
     const handler = () => setPage(getPageFromHash());
@@ -46,6 +48,9 @@ export default function App() {
   };
 
   if (!authed) {
+    if (!showAuth) {
+      return <Landing onGetStarted={() => setShowAuth(true)} />;
+    }
     return <Auth onAuth={() => setAuthed(true)} />;
   }
 
