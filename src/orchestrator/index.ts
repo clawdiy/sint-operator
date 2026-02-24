@@ -40,6 +40,7 @@ import { newsletterSkill } from '../skills/newsletter/index.js';
 import { competitorAnalyzerSkill } from '../skills/competitor-analyzer/index.js';
 import { imageGeneratorSkill } from '../skills/image-generator/index.js';
 import { schemaGeneratorSkill } from '../skills/schema-generator/index.js';
+import { contentPublisherSkill } from '../skills/content-publisher/index.js';
 
 import type { BrandProfile, PipelineRun, Logger, ModelConfig, StepRun } from '../core/types.js';
 
@@ -100,6 +101,7 @@ export class Orchestrator {
     registerSkill(competitorAnalyzerSkill);
     registerSkill(imageGeneratorSkill);
     registerSkill(schemaGeneratorSkill);
+    registerSkill(contentPublisherSkill);
 
     // Discover external skills (L1 — manifest only)
     discoverSkills(join(config.configDir, 'skills'));

@@ -1,7 +1,7 @@
 id: content-repurpose
 name: Content Repurposing Pipeline
-description: "Upload one long-form asset → multi-platform content suite"
-version: "2.0"
+description: "Upload one long-form asset → multi-platform content suite with AI images → schedule & publish"
+version: "3.0"
 
 trigger:
   type: asset_upload
@@ -24,7 +24,15 @@ inputs:
     default: active_brand
   - name: platforms
     type: array
-    default: [tiktok, instagram_reels, linkedin, blog]
+    default: [tiktok, instagram_reels, linkedin, blog, twitter]
+  - name: auto_schedule
+    type: boolean
+    description: "Automatically create content calendar entries and queue for publishing"
+    default: false
+  - name: schedule_days
+    type: number
+    description: "Number of days to spread posts across"
+    default: 7
 
 steps:
   - id: ingest
@@ -55,7 +63,7 @@ steps:
     modelTier: complex
     action: >
       Using the content map, generate platform-specific deliverables.
-      Each piece is complete and ready to post.
+      Each piece is complete and ready to post — no placeholders.
     inputs:
       text: "$raw_transcript.raw_transcript"
       target_platforms: "${inputs.platforms}"
@@ -68,10 +76,8 @@ steps:
   - id: clip_video
     skill: video-clipper
     action: >
-      Extract short-form video clips (15-60s) optimized for TikTok and
-      Instagram Reels from the source asset. Use the content map to
-      identify the best hook moments. Apply 9:16 crop, burned-in captions,
-      and brand watermark.
+      Extract short-form video clips (15-60s) for TikTok/Reels.
+      Use content map hook moments. Apply 9:16 crop and captions.
     inputs:
       source_asset: "${inputs.source_asset}"
       content_map: "$content_map"
@@ -85,30 +91,70 @@ steps:
   - id: generate_images
     skill: image-generator
     action: >
-      Generate social media images for each platform post. Create
-      visually compelling graphics that match the content and brand style.
+      Generate a unique, platform-optimized image for each social media post.
+      Each image should be eye-catching, on-brand, and designed to stop the scroll.
+      Create different styles per platform: LinkedIn (professional/clean),
+      Instagram (vibrant/visual), Twitter (bold/minimal), Blog (hero/editorial).
     inputs:
       prompt: >
-        Create a professional social media graphic for: $deliverables.summary.
-        Brand style: ${inputs.brand_profile}. Modern, clean, engaging design.
+        Create a set of professional social media graphics based on this content:
+        $deliverables.summary.
+        Style: Modern, premium, editorial. Bold typography overlay with the key message.
+        Brand colors and clean composition. Each image should feel native to its platform.
+        Make it scroll-stopping and shareable.
       count: 4
       size: "1024x1024"
+      quality: "hd"
     retry:
       max: 2
       backoff: exponential
     output: platform_images
 
+  - id: build_calendar
+    skill: social-calendar
+    action: >
+      Take the generated deliverables and create an optimized posting schedule.
+      Spread posts across ${inputs.schedule_days} days with optimal timing per platform.
+      Consider audience activity patterns: LinkedIn (Tue-Thu 9am-12pm),
+      Twitter (weekdays 8am-4pm), Instagram (Mon/Wed/Fri 11am-1pm),
+      TikTok (Tue-Thu 7-9pm). Assign each deliverable a specific date, time, and platform.
+    inputs:
+      days: "${inputs.schedule_days}"
+      platforms: "${inputs.platforms}"
+      posts_per_day: 2
+      content_brief: "$deliverables.summary"
+    output: content_calendar
+
+  - id: queue_publish
+    skill: content-publisher
+    action: >
+      Queue all approved content pieces for publishing at their scheduled times.
+      For each deliverable: create a publish job with the content, platform,
+      scheduled datetime, and associated image. If auto_schedule is true,
+      queue immediately. Otherwise, mark as pending_approval.
+    inputs:
+      deliverables: "$deliverables"
+      calendar: "$content_calendar"
+      images: "$platform_images"
+      video_clips: "$video_clips"
+      auto_schedule: "${inputs.auto_schedule}"
+      brand_profile: "${inputs.brand_profile}"
+    output: publish_queue
+
   - id: approval_gate
     skill: notifier
     action: >
-      Send generated content package for human approval before publishing.
-      Include all deliverables, video clips, and generated images for review.
+      Send the complete content package for human approval.
+      Include all deliverables, images, video clips, calendar schedule,
+      and publish queue status. Notify via Telegram/WhatsApp with
+      inline approve/reject buttons for each piece.
     inputs:
       deliverables: "$deliverables"
       video_clips: "$video_clips"
       platform_images: "$platform_images"
+      content_calendar: "$content_calendar"
+      publish_queue: "$publish_queue"
       action: "approval_request"
-    condition: "env.APPROVAL_REQUIRED"
     output: approval_status
 
 outputs:
@@ -143,3 +189,9 @@ outputs:
   - platform: tiktok,instagram_reels
     format: video_clips
     source: video_clips
+  - platform: all
+    format: calendar
+    source: content_calendar
+  - platform: all
+    format: publish_queue
+    source: publish_queue
