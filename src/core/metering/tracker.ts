@@ -67,9 +67,10 @@ export class MeteringTracker {
     }
 
     if (updates.length > 0) {
-      this.db.exec(
-        `UPDATE usage_limits SET ${updates.join(', ')} WHERE id = 'default' AND daily_cost_limit <= 100.0`
-      );
+      const whereClause = hasDailyCostLimit
+        ? `WHERE id = 'default' AND daily_cost_limit <= 100.0`
+        : `WHERE id = 'default'`;
+      this.db.exec(`UPDATE usage_limits SET ${updates.join(', ')} ${whereClause}`);
     }
   }
 
