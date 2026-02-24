@@ -76,6 +76,19 @@ export function normalizeRunPayload(run: any): any {
   };
 }
 
+// Auth
+export const login = (email: string, password: string) =>
+  request<{ token: string }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+
+export const signup = (email: string, password: string, name: string) =>
+  request<{ token: string }>('/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, name }),
+  });
+
 // Health
 export const getHealth = () => request<{
   status: string; version: string; skills: number; brands: number; pipelines: number;

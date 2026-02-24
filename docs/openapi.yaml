@@ -5,8 +5,8 @@ info:
     to social channels.
   version: 1.0.0
 servers:
-- url: http://localhost:3000
-  description: Local dev
+- url: /
+  description: Current server
 security:
 - BearerAuth: []
 tags:

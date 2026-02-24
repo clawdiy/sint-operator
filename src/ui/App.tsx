@@ -10,7 +10,9 @@ import Skills from './components/Skills';
 import Settings from './components/Settings';
 import ErrorBoundary from './components/ErrorBoundary';
 import Onboarding from './components/Onboarding';
+import Auth from './components/Auth';
 import { ToastProvider } from './components/Toast';
+import { clearAuthToken } from './api';
 
 type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings';
 
@@ -23,6 +25,7 @@ function getPageFromHash(): Page {
 export default function App() {
   const [page, setPage] = useState<Page>(getPageFromHash);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [authed, setAuthed] = useState(() => !!localStorage.getItem('sint_auth_token'));
 
   React.useEffect(() => {
     const handler = () => setPage(getPageFromHash());
@@ -34,6 +37,15 @@ export default function App() {
     window.location.hash = p;
     setPage(p);
   };
+
+  const handleLogout = () => {
+    clearAuthToken();
+    setAuthed(false);
+  };
+
+  if (!authed) {
+    return <Auth onAuth={() => setAuthed(true)} />;
+  }
 
   const renderPage = () => {
     switch (page) {
@@ -53,7 +65,7 @@ export default function App() {
     <ToastProvider>
       <ErrorBoundary>
         <Onboarding onComplete={() => setRefreshKey(k => k + 1)} />
-        <Layout currentPage={page} onNavigate={navigate}>
+        <Layout currentPage={page} onNavigate={navigate} onLogout={handleLogout}>
           <React.Fragment key={refreshKey}>{renderPage()}</React.Fragment>
         </Layout>
       </ErrorBoundary>

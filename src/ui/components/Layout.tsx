@@ -17,10 +17,11 @@ const NAV_ITEMS: { page: Page; icon: string; label: string }[] = [
 interface Props {
   currentPage: Page;
   onNavigate: (page: Page) => void;
+  onLogout?: () => void;
   children: React.ReactNode;
 }
 
-export default function Layout({ currentPage, onNavigate, children }: Props) {
+export default function Layout({ currentPage, onNavigate, onLogout, children }: Props) {
   const [collapsed, setCollapsed] = React.useState(() => {
     if (typeof window === 'undefined') return false;
     const stored = localStorage.getItem('sint_sidebar_collapsed');
@@ -62,6 +63,17 @@ export default function Layout({ currentPage, onNavigate, children }: Props) {
             {collapsed ? '▶' : '◀'}
           </button>
           {!collapsed && <span className="version">v0.5.0</span>}
+          {onLogout && (
+            <button
+              className="nav-item"
+              onClick={onLogout}
+              title="Log out"
+              style={{ marginTop: 8, color: '#f85149' }}
+            >
+              <span className="nav-icon">🚪</span>
+              {!collapsed && <span className="nav-label">Log Out</span>}
+            </button>
+          )}
         </div>
       </aside>
       <div className="main-area">
