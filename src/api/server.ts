@@ -1148,7 +1148,8 @@ app.get('/health', (_req, res) => {
   app.use('/api/webhooks/openclaw', createOpenClawRoutes({
     secret: process.env.OPENCLAW_WEBHOOK_SECRET ?? '',
     onPipelineRun: async (pipelineId, inputs) => {
-      const run = await orchestrator.runPipeline(pipelineId, inputs);
+      const brandId = (inputs.brandId as string) || (inputs.brand_id as string) || 'sint-brand';
+      const run = await orchestrator.runPipeline(pipelineId, brandId, inputs);
       return run;
     },
   }));

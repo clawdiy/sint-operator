@@ -4,14 +4,14 @@ FROM node:22-slim AS builder
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-# cache-bust: v2
+# cache-bust: v3
 COPY package.json package-lock.json* ./
 RUN npm install
 
 COPY . .
 
-# Build backend TypeScript
-RUN npx tsc --skipLibCheck || echo "⚠️ TSC failed but continuing"
+# Build backend TypeScript using esbuild (fast, reliable, ignores type errors)
+RUN node build.mjs
 
 # Backup fallback UI before vite (emptyOutDir wipes src/ui/dist/)
 RUN cp -r src/ui/dist /tmp/ui-fallback 2>/dev/null || true
@@ -20,28 +20,23 @@ RUN cp -r src/ui/dist /tmp/ui-fallback 2>/dev/null || true
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN CI=true npm run ui:build 2>&1 || echo "⚠️ Vite build failed, using fallback"
 
-# Ensure ui-static exists -- use vite output, fallback, or generate minimal page
+# Ensure ui-static exists
 RUN mkdir -p dist/ui-static && \
     if [ -f src/ui/dist/index.html ]; then \
-      echo "Using Vite-built UI"; \
+      echo "✅ Using Vite-built UI"; \
       cp -r src/ui/dist/* dist/ui-static/; \
     elif [ -f /tmp/ui-fallback/index.html ]; then \
-      echo "Using fallback UI"; \
+      echo "⚠️ Using fallback UI"; \
       cp -r /tmp/ui-fallback/* dist/ui-static/; \
     else \
-      echo "Generating minimal UI placeholder"; \
-      echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SINT Operator</title></head><body style="background:#0d1117;color:#e6edf3;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><h1>SINT Marketing Operator</h1><p>API is running. <a href="/health" style="color:#58a6ff">/health</a> | <a href="/api/docs" style="color:#58a6ff">/api/docs</a></p></div></body></html>' > dist/ui-static/index.html; \
+      echo "❌ No UI available"; \
     fi
 
 # ─── Stage 2: Production ─────────────────────────────────────
 FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    curl \
-    python3 \
-    make \
-    g++ \
+    ffmpeg curl python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

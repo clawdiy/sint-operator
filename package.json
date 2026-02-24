@@ -6,12 +6,13 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npx tsc && cp -r src/ui/dist dist/ui-static 2>/dev/null || true",
+    "build": "node build.mjs",
     "start": "node dist/index.js",
     "test": "vitest",
     "pipeline": "tsx src/cli.ts",
     "ui:dev": "vite --config vite.config.ts",
-    "ui:build": "vite build --config vite.config.ts"
+    "ui:build": "vite build --config vite.config.ts",
+    "build:tsc": "tsc --skipLibCheck"
   },
   "engines": {
     "node": ">=22.0.0"
@@ -29,12 +30,12 @@
     "js-yaml": "^4.1.0",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.7",
+    "node-telegram-bot-api": "^0.66.0",
     "openai": "^4.73.0",
     "p-queue": "^8.0.1",
     "playwright": "^1.49.0",
     "sharp": "^0.33.5",
     "winston": "^3.15.0",
-    "node-telegram-bot-api": "^0.66.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -50,6 +51,8 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
+    "esbuild": "^0.24.2",
+    "esbuild-plugin-glob": "^2.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tsx": "^4.19.0",

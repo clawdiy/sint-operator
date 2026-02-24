@@ -1,5 +1,5 @@
 /**
- * SINT Marketing Operator v0.5.0 — Entry Point
+ * SINT Marketing Operator v0.6.0 — Entry Point
  * 
  * Intelligent model routing, progressive skill disclosure,
  * metering with hard stops, and audit trail.
@@ -51,7 +51,7 @@ for (const dir of [
 
 console.log(`
 ╔══════════════════════════════════════════════════╗
-║     SINT MARKETING OPERATOR v0.5.0              ║
+║     SINT MARKETING OPERATOR v0.6.0              ║
 ║     "No prompts. Just outcomes."                ║
 ╠══════════════════════════════════════════════════╣
 ║  Models:                                        ║
