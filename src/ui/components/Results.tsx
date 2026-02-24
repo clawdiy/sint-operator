@@ -242,7 +242,7 @@ export default function Results() {
     try {
       await deleteRun(id);
       setRuns(prev => prev.filter(r => r.id !== id));
-      if (selectedRun?.id === id) { setSelectedRun(null); setRunDetail(null); }
+      if (selected?.id === id) { setSelected(null); }
     } catch {}
   };
 
