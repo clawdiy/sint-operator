@@ -1104,7 +1104,7 @@ Respond with JSON: { "variants": [{ "content": "full post text", "hook": "the ho
 app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
-      version: process.env.npm_package_version || '0.5.0',
+      version: process.env.npm_package_version || '0.6.0',
       name: 'SINT Marketing Operator',
       skills: orchestrator.listSkills().length,
       brands: orchestrator.listBrands().length,

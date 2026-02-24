@@ -24,6 +24,10 @@ inputs:
     type: array
     description: "Ad platforms to generate copy for"
     default: [instagram, facebook, linkedin, twitter]
+  - name: product_image
+    type: file
+    description: "Optional product photo for ad creative rendering"
+    required: false
 
 steps:
   - id: analyze
@@ -59,6 +63,28 @@ steps:
       backoff: exponential
     output: ad_variations
 
+  - id: render_ad_creatives
+    skill: image-generator
+    action: >
+      Generate actual ad creative images for the top variations.
+      Create product-focused visuals with different layouts, background
+      swaps, and headline overlays for each platform.
+    inputs:
+      prompt: >
+        Create a professional ad creative for: $ad_variations.headline_variations[0].
+        Product: ${inputs.product_description}.
+        Campaign goal: ${inputs.campaign_goal}.
+        Style: clean, high-converting ad design with bold headline text overlay,
+        product focus, and strong CTA. Platform: ${inputs.target_platforms}.
+        If product image provided, incorporate product photography style.
+      count: 5
+      size: "1024x1024"
+      quality: "hd"
+    retry:
+      max: 2
+      backoff: exponential
+    output: ad_creatives
+
 outputs:
   - format: ad_copy_package
     includes:
@@ -66,3 +92,4 @@ outputs:
       - body_copy_variations
       - cta_options
       - platform_adaptations
+      - ad_creative_images

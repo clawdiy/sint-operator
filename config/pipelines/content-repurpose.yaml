@@ -65,6 +65,52 @@ steps:
       backoff: exponential
     output: deliverables
 
+  - id: clip_video
+    skill: video-clipper
+    action: >
+      Extract short-form video clips (15-60s) optimized for TikTok and
+      Instagram Reels from the source asset. Use the content map to
+      identify the best hook moments. Apply 9:16 crop, burned-in captions,
+      and brand watermark.
+    inputs:
+      source_asset: "${inputs.source_asset}"
+      content_map: "$content_map"
+      platforms: ["tiktok", "instagram_reels"]
+    condition: "$raw_transcript.mediaType == 'video'"
+    retry:
+      max: 1
+      backoff: exponential
+    output: video_clips
+
+  - id: generate_images
+    skill: image-generator
+    action: >
+      Generate social media images for each platform post. Create
+      visually compelling graphics that match the content and brand style.
+    inputs:
+      prompt: >
+        Create a professional social media graphic for: $deliverables.summary.
+        Brand style: ${inputs.brand_profile}. Modern, clean, engaging design.
+      count: 4
+      size: "1024x1024"
+    retry:
+      max: 2
+      backoff: exponential
+    output: platform_images
+
+  - id: approval_gate
+    skill: notifier
+    action: >
+      Send generated content package for human approval before publishing.
+      Include all deliverables, video clips, and generated images for review.
+    inputs:
+      deliverables: "$deliverables"
+      video_clips: "$video_clips"
+      platform_images: "$platform_images"
+      action: "approval_request"
+    condition: "env.APPROVAL_REQUIRED"
+    output: approval_status
+
 outputs:
   - platform: twitter
     format: thread
@@ -91,3 +137,9 @@ outputs:
     format: article
     constraints:
       maxLength: 50000
+  - platform: all
+    format: images
+    source: platform_images
+  - platform: tiktok,instagram_reels
+    format: video_clips
+    source: video_clips

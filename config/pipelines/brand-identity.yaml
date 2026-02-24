@@ -46,6 +46,68 @@ steps:
       backoff: exponential
     output: brand_identity
 
+  - id: generate_color_palette
+    skill: image-generator
+    action: >
+      Create a color palette visualization based on brand research.
+      Show primary, secondary, and accent colors with hex codes.
+    inputs:
+      prompt: >
+        Create a professional color palette visualization for brand "${inputs.brand_name}"
+        in the ${inputs.industry} industry. Based on brand identity: $brand_identity.color_palette.
+        Show 5-7 color swatches in a clean, modern layout with hex codes displayed
+        beneath each swatch. Include primary, secondary, accent, and neutral colors.
+        Style: ${inputs.style_preferences}. Clean white background.
+      count: 1
+      size: "1792x1024"
+      quality: "hd"
+    retry:
+      max: 2
+      backoff: exponential
+    output: color_palette_visual
+
+  - id: generate_logos
+    skill: image-generator
+    action: >
+      Generate 5 logo concepts based on brand research and identity guidelines.
+      Each concept should explore a different direction.
+    inputs:
+      prompt: >
+        Design a professional logo for "${inputs.brand_name}" — a ${inputs.industry} brand.
+        Brand personality: $brand_identity.brand_positioning.
+        Style: ${inputs.style_preferences}. Logo direction: $brand_identity.logo_direction.
+        Create a clean, memorable, scalable logo mark. White background, vector-style,
+        professional quality. The logo should work at small and large sizes.
+      count: 5
+      size: "1024x1024"
+      quality: "hd"
+      style: "natural"
+    retry:
+      max: 2
+      backoff: exponential
+    output: logo_concepts
+
+  - id: generate_mockups
+    skill: image-generator
+    action: >
+      Generate brand mockups showing the identity applied to real materials:
+      business card, letterhead, and social media profile.
+    inputs:
+      prompt: >
+        Create a professional brand identity mockup for "${inputs.brand_name}".
+        Show the brand applied to: 1) A business card (front), 2) Company letterhead,
+        3) Social media profile header. Use brand colors from $color_palette_visual
+        and logo style from $logo_concepts. Industry: ${inputs.industry}.
+        Style: ${inputs.style_preferences}. Photorealistic mockup on a clean,
+        modern desk setting. High quality, professional presentation.
+      count: 3
+      size: "1792x1024"
+      quality: "hd"
+    retry:
+      max: 2
+      backoff: exponential
+    output: brand_mockups
+
 outputs:
   - format: brand_package
     includes:
@@ -55,3 +117,6 @@ outputs:
       - logo_direction
       - voice_and_tone
       - visual_style_guide
+      - logo_concepts
+      - brand_mockups
+      - color_palette_visualization

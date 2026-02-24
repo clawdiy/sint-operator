@@ -47,6 +47,40 @@ steps:
       backoff: exponential
     output: article
 
+  - id: generate_hero_image
+    skill: image-generator
+    action: >
+      Create a hero/featured image for the blog post that visually
+      represents the topic and attracts clicks.
+    inputs:
+      prompt: >
+        Create a professional blog hero image for an article titled:
+        "$article.meta_title". Topic: ${inputs.topic}.
+        Style: modern, clean, editorial photography style. The image should
+        be visually compelling, relevant to the topic, and work as a
+        featured image / social sharing thumbnail. No text in the image.
+        Wide format, high quality.
+      count: 1
+      size: "1792x1024"
+      quality: "hd"
+      style: "natural"
+    retry:
+      max: 2
+      backoff: exponential
+    output: hero_image
+
+  - id: generate_schema
+    skill: schema-generator
+    action: >
+      Generate JSON-LD structured data for the blog post including
+      Article schema, and optionally FAQ and HowTo schemas if the
+      content contains Q&A or step-by-step sections.
+    inputs:
+      content: "$article"
+      schema_types: ["article", "faq", "howto"]
+      author: "${inputs.brand_profile}"
+    output: seo_schemas
+
 outputs:
   - format: markdown
     includes:
@@ -54,3 +88,5 @@ outputs:
       - meta_title
       - meta_description
       - heading_structure
+      - hero_image
+      - json_ld_schemas

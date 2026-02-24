@@ -57,6 +57,32 @@ steps:
       backoff: exponential
     output: infographic_content
 
+  - id: render_infographic
+    skill: image-generator
+    modelTier: complex
+    action: >
+      Generate an actual infographic image using DALL-E 3 based on the
+      structured content brief. Create a visually rich, data-driven
+      infographic with clear hierarchy, icons, and data visualizations.
+    inputs:
+      prompt: >
+        Create a detailed, professional infographic in ${inputs.style} style.
+        Title: $infographic_content.title.
+        Key data points: $infographic_content.data_callouts.
+        Sections: $infographic_content.section_content.
+        Brand colors and style from: ${inputs.brand_profile}.
+        The infographic should be vertical, clean, modern, with clear data
+        visualization, icons, and a strong visual hierarchy. Include charts,
+        numbers in large bold text, and section dividers.
+      count: 2
+      size: "1024x1792"
+      quality: "hd"
+      style: "vivid"
+    retry:
+      max: 2
+      backoff: exponential
+    output: infographic_images
+
 outputs:
   - format: infographic_brief
     includes:
@@ -66,3 +92,4 @@ outputs:
       - visual_hierarchy
       - alt_text
       - design_notes
+      - infographic_images

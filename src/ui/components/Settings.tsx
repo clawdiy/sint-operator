@@ -350,6 +350,74 @@ export default function Settings() {
 
       <ConnectedAccounts />
 
+      {/* Telegram Bot Setup */}
+      <h2>🤖 Telegram Bot</h2>
+      <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.8, marginBottom: 16 }}>
+          Connect a Telegram bot to trigger pipelines and receive notifications via chat.
+        </p>
+        <div style={{ marginBottom: 16 }}>
+          <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Setup Steps:</h4>
+          <ol style={{ paddingLeft: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+            <li>Open Telegram and search for <strong>@BotFather</strong></li>
+            <li>Send <code>/newbot</code> and follow the prompts to create your bot</li>
+            <li>Copy the bot token (looks like <code>123456:ABC-DEF...</code>)</li>
+            <li>Set the <code>TELEGRAM_BOT_TOKEN</code> environment variable in Railway</li>
+            <li>Set <code>TELEGRAM_WEBHOOK_URL</code> to <code>{window.location.origin}/api/webhooks/telegram</code></li>
+            <li>Restart the service — the bot will register its webhook automatically</li>
+          </ol>
+        </div>
+        <div style={{ padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all' }}>
+          Webhook URL: {window.location.origin}/api/webhooks/telegram
+        </div>
+      </div>
+
+      {/* WhatsApp Setup */}
+      <h2>💬 WhatsApp</h2>
+      <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.8, marginBottom: 16 }}>
+          Connect WhatsApp Business API for conversational content generation.
+        </p>
+        <div style={{ marginBottom: 16 }}>
+          <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Setup Steps:</h4>
+          <ol style={{ paddingLeft: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+            <li>Create a <a href="https://developers.facebook.com" target="_blank" rel="noopener" style={{ color: 'var(--accent)' }}>Meta Developer</a> account</li>
+            <li>Set up a WhatsApp Business App and get your access token</li>
+            <li>Set <code>WHATSAPP_ACCESS_TOKEN</code> and <code>WHATSAPP_PHONE_NUMBER_ID</code> in Railway</li>
+            <li>Set <code>WHATSAPP_VERIFY_TOKEN</code> to a secret string of your choice</li>
+            <li>Configure the webhook URL in Meta Developer Console:</li>
+          </ol>
+        </div>
+        <div style={{ padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all' }}>
+          Webhook URL: {window.location.origin}/api/webhooks/whatsapp
+        </div>
+      </div>
+
+      {/* OpenClaw Webhook */}
+      <h2>🔗 OpenClaw Webhook</h2>
+      <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.8, marginBottom: 16 }}>
+          Receive events from OpenClaw agents to trigger pipelines automatically.
+        </p>
+        <div style={{ marginBottom: 16 }}>
+          <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Configuration:</h4>
+          <ol style={{ paddingLeft: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+            <li>Set <code>OPENCLAW_WEBHOOK_SECRET</code> in Railway to a random secret</li>
+            <li>Configure your OpenClaw agent to POST to the webhook URL below</li>
+            <li>Include the secret in the <code>X-Webhook-Secret</code> header</li>
+          </ol>
+        </div>
+        <div style={{ padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all', marginBottom: 12 }}>
+          Webhook URL: {window.location.origin}/api/webhooks/openclaw
+        </div>
+        <button className="btn small" onClick={() => {
+          navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/openclaw`);
+          addToast('success', 'Webhook URL copied to clipboard');
+        }}>
+          📋 Copy URL
+        </button>
+      </div>
+
       <SystemInfo />
 
       <h2>Developer Tools</h2>

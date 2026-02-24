@@ -38,6 +38,12 @@ tags:
   description: Authentication endpoints
 - name: System
   description: Health checks
+- name: Approvals
+  description: Content approval workflow
+- name: OAuth
+  description: OAuth integrations
+- name: Webhooks
+  description: Incoming webhooks (Telegram, WhatsApp, OpenClaw)
 - name: Templates
   description: Quick content templates
 - name: Schedules
@@ -1362,6 +1368,359 @@ paths:
                     type: boolean
         '400':
           $ref: '#/components/responses/BadRequest'
+  /api/generate/image:
+    post:
+      tags:
+      - Quick Actions
+      summary: Generate an image
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - prompt
+              properties:
+                prompt:
+                  type: string
+                  description: Image generation prompt
+                size:
+                  type: string
+                  description: Image size (e.g. 1024x1024)
+                style:
+                  type: string
+                  description: Image style (e.g. vivid, natural)
+                model:
+                  type: string
+                  description: Model to use (e.g. dall-e-3)
+      responses:
+        '200':
+          description: Image generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                  revisedPrompt:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/generate/video:
+    post:
+      tags:
+      - Quick Actions
+      summary: Generate a video
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - prompt
+              properties:
+                prompt:
+                  type: string
+                  description: Video generation prompt
+                imageUrl:
+                  type: string
+                  description: Optional reference image URL
+                duration:
+                  type: number
+                  description: Video duration in seconds
+      responses:
+        '202':
+          description: Video job started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  status:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/generate/video/{jobId}:
+    get:
+      tags:
+      - Quick Actions
+      summary: Get video generation job status
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                    - pending
+                    - processing
+                    - completed
+                    - failed
+                  url:
+                    type: string
+                  error:
+                    type: string
+        '404':
+          description: Job not found
+  /api/approvals:
+    get:
+      tags:
+      - Approvals
+      summary: List content approvals
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+      responses:
+        '200':
+          description: Approval list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Approval'
+  /api/approvals/{id}/approve:
+    post:
+      tags:
+      - Approvals
+      summary: Approve content
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Content approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '404':
+          description: Not found
+  /api/approvals/{id}/reject:
+    post:
+      tags:
+      - Approvals
+      summary: Reject content
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Content rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '404':
+          description: Not found
+  /api/approvals/{id}/edit:
+    post:
+      tags:
+      - Approvals
+      summary: Edit content before approving
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - content
+              properties:
+                content:
+                  type: string
+                  description: Edited content
+      responses:
+        '200':
+          description: Content edited and approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '404':
+          description: Not found
+  /api/oauth/{provider}/authorize:
+    get:
+      tags:
+      - OAuth
+      summary: Start OAuth authorization flow
+      security: []
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - twitter
+          - linkedin
+          - facebook
+          - instagram
+      responses:
+        '302':
+          description: Redirect to OAuth provider
+  /api/oauth/{provider}/callback:
+    get:
+      tags:
+      - OAuth
+      summary: OAuth callback
+      security: []
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: code
+        in: query
+        schema:
+          type: string
+      - name: state
+        in: query
+        schema:
+          type: string
+      responses:
+        '302':
+          description: Redirect back to app after auth
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/oauth/status:
+    get:
+      tags:
+      - OAuth
+      summary: Get connected OAuth accounts
+      responses:
+        '200':
+          description: Connected account statuses
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    connected:
+                      type: boolean
+                    username:
+                      type: string
+  /api/webhooks/openclaw:
+    post:
+      tags:
+      - Webhooks
+      summary: OpenClaw webhook receiver
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/webhooks/telegram:
+    post:
+      tags:
+      - Webhooks
+      summary: Telegram bot webhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+  /api/webhooks/whatsapp:
+    post:
+      tags:
+      - Webhooks
+      summary: WhatsApp webhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
 components:
   securitySchemes:
     BearerAuth:
@@ -1594,6 +1953,31 @@ components:
           type: string
           format: date-time
         createdAt:
+          type: string
+          format: date-time
+    Approval:
+      type: object
+      properties:
+        id:
+          type: string
+        runId:
+          type: string
+        pipelineId:
+          type: string
+        brandId:
+          type: string
+        content:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+        createdAt:
+          type: string
+          format: date-time
+        reviewedAt:
           type: string
           format: date-time
     ScheduleInput:
