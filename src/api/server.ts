@@ -42,6 +42,9 @@ import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '.
 import { getSocialCredentials, getSocialStatus, initSocialAccountDB, storeSocialCredentials } from '../auth/social-account-service.js';
 import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, closeNotificationStore, createNotificationsRouter, initNotificationStore } from './notifications.js';
+import { createGenerateRoutes } from './generate-routes.js';
+import { createOAuthRoutes } from './oauth-routes.js';
+import { createOpenClawRoutes } from '../integrations/openclaw-connector.js';
 import { createBrand, getBrand, listBrands, saveBrand } from '../core/brand/manager.js';
 import type { LinkedInCredentials, TwitterCredentials } from '../services/social/types.js';
 import { validateBody } from './validation.js';
@@ -1140,6 +1143,15 @@ app.get('/health', (_req, res) => {
   app.use("/api/publish", createPublishRoutes());
   app.use('/api/onboarding', createOnboardingRouter({ brandsDir }));
   app.use('/api/notifications', createNotificationsRouter());
+  app.use('/api/generate', createGenerateRoutes({ openaiApiKey: process.env.OPENAI_API_KEY }));
+  app.use('/api/oauth', createOAuthRoutes({ baseUrl: process.env.BASE_URL ?? `http://localhost:${port}` }));
+  app.use('/api/webhooks/openclaw', createOpenClawRoutes({
+    secret: process.env.OPENCLAW_WEBHOOK_SECRET ?? '',
+    onPipelineRun: async (pipelineId, inputs) => {
+      const run = await orchestrator.runPipeline(pipelineId, inputs);
+      return run;
+    },
+  }));
 
   // ─── Approvals ──────────────────────────────────────────
 

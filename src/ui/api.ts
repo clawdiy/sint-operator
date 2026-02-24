@@ -344,3 +344,36 @@ export const generateVariants = (brandId: string, content: string, platform: str
 // ─── Export ────────────────────────────────────────────────
 export const exportRuns = (format?: 'json' | 'markdown') =>
   fetch(`${BASE}/api/export?format=${format || 'json'}`).then(r => format === 'markdown' ? r.text() : r.json());
+
+// ─── Image/Video Generation ────────────────────────────────
+export const generateImage = (prompt: string, options?: { size?: string; style?: string; model?: string }) =>
+  request<{ url?: string; base64?: string; revisedPrompt?: string }>('/api/generate/image', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, ...options }),
+  });
+
+export const generateVideo = (prompt: string, options?: { imageUrl?: string; duration?: number }) =>
+  request<{ jobId: string; status: string }>('/api/generate/video', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, ...options }),
+  });
+
+export const getVideoJobStatus = (jobId: string) =>
+  request<{ jobId: string; status: string; url?: string; error?: string }>(`/api/generate/video/${jobId}`);
+
+// ─── Approvals ─────────────────────────────────────────────
+export const getApprovals = (status?: string) =>
+  request<any[]>(`/api/approvals${status ? `?status=${status}` : ''}`);
+
+export const approveContent = (id: string) =>
+  request<any>(`/api/approvals/${id}/approve`, { method: 'POST' });
+
+export const rejectContent = (id: string, reason?: string) =>
+  request<any>(`/api/approvals/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+
+// ─── OAuth / Integrations ──────────────────────────────────
+export const getOAuthStatus = () =>
+  request<Record<string, { connected: boolean; email?: string; expiresAt?: string }>>('/api/oauth/status');
+
+export const disconnectOAuth = (provider: string) =>
+  request<{ ok: boolean }>(`/api/oauth/${provider}/disconnect`, { method: 'POST' });

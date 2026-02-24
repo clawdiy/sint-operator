@@ -8,6 +8,7 @@ import Assets from './components/Assets';
 import Usage from './components/Usage';
 import Skills from './components/Skills';
 import Settings from './components/Settings';
+import Integrations from './components/Integrations';
 import Approvals from './components/Approvals';
 import ErrorBoundary from './components/ErrorBoundary';
 import Onboarding from './components/Onboarding';
@@ -15,11 +16,11 @@ import Auth from './components/Auth';
 import { ToastProvider } from './components/Toast';
 import { clearAuthToken } from './api';
 
-type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings' | 'approvals';
+type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings' | 'approvals' | 'integrations';
 
 function getPageFromHash(): Page {
   const hash = window.location.hash.slice(1);
-  const valid: Page[] = ['dashboard', 'pipelines', 'brands', 'results', 'assets', 'usage', 'skills', 'settings', 'approvals'];
+  const valid: Page[] = ['dashboard', 'pipelines', 'brands', 'results', 'assets', 'usage', 'skills', 'settings', 'approvals', 'integrations'];
   return valid.includes(hash as Page) ? (hash as Page) : 'dashboard';
 }
 
@@ -58,6 +59,7 @@ export default function App() {
       case 'usage': return <Usage />;
       case 'skills': return <Skills />;
       case 'settings': return <Settings />;
+      case 'integrations': return <Integrations />;
       case 'approvals': return <Approvals />;
       default: return <Dashboard onNavigate={navigate} />;
     }
