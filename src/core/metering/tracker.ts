@@ -52,8 +52,25 @@ export class MeteringTracker {
 
       INSERT OR IGNORE INTO usage_limits (id) VALUES ('default');
     `);
-    // Migrate existing DBs with low default limits
-    this.db.exec(`UPDATE usage_limits SET daily_cost_limit = 50000.0, daily_run_limit = 10000 WHERE id = 'default' AND daily_cost_limit <= 100.0`);
+    // Migrate existing DBs with low default limits.
+    // Older schemas may not have every expected column, so gate updates by existing columns.
+    const columns = this.db.prepare(`PRAGMA table_info(usage_limits)`).all() as Array<{ name: string }>;
+    const hasDailyCostLimit = columns.some((col) => col.name === 'daily_cost_limit');
+    const hasDailyRunLimit = columns.some((col) => col.name === 'daily_run_limit');
+    const updates: string[] = [];
+
+    if (hasDailyCostLimit) {
+      updates.push(`daily_cost_limit = 50000.0`);
+    }
+    if (hasDailyRunLimit) {
+      updates.push(`daily_run_limit = 10000`);
+    }
+
+    if (updates.length > 0) {
+      this.db.exec(
+        `UPDATE usage_limits SET ${updates.join(', ')} WHERE id = 'default' AND daily_cost_limit <= 100.0`
+      );
+    }
   }
 
   // ─── Recording ──────────────────────────────────────────

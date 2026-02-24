@@ -371,7 +371,7 @@ export function initTelegramBot(orchestrator: Orchestrator): TelegramBot | null 
 
   bot.on('video', (msg) => {
     if (!msg.video) return;
-    handleFile(msg, msg.video.file_id, msg.video.file_name || `video_${Date.now()}.mp4`);
+    handleFile(msg, msg.video.file_id, `video_${Date.now()}.mp4`);
   });
 
   bot.on('document', (msg) => {
