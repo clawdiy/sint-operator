@@ -38,7 +38,7 @@ export const linkedinWriterSkill: Skill = {
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
-    const contentMap = ctx.inputs.content_map as Record<string, unknown>;
+    const contentMap = (ctx.inputs.content_map ?? ctx.inputs.content ?? ctx.inputs.text ?? {}) as Record<string, unknown>;
     const count = (ctx.inputs.count as number) ?? 3;
 
     const brandContext = buildBrandContext(ctx.brand);

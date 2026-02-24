@@ -51,9 +51,9 @@ export const brandResearcherSkill: Skill = {
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
-    const industry = ctx.inputs.industry as string;
-    const brandQuiz = ctx.inputs.brand_quiz as Record<string, unknown>;
-    const competitors = (ctx.inputs.competitors as string[]) ?? [];
+    const industry = (ctx.inputs.industry ?? ctx.inputs.content ?? "") as string;
+    const brandQuiz = (ctx.inputs.brand_quiz ?? ctx.inputs.personality_traits ?? {}) as Record<string, unknown>;
+    const competitors = (Array.isArray(ctx.inputs.competitors) ? ctx.inputs.competitors : typeof ctx.inputs.competitors === "string" ? (ctx.inputs.competitors as string).split(",").map((s: string) => s.trim()) : []) as string[];
 
     const result = await ctx.llm.completeJSON<BrandDirection>(
       `You are a brand strategist creating a data-driven brand direction.

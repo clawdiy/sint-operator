@@ -112,7 +112,7 @@ export const contentRepurposeSkill: Skill = {
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
-    const text = ctx.inputs.text as string;
+    const text = (ctx.inputs.text ?? ctx.inputs.content ?? ctx.inputs.raw_transcript ?? "") as string;
     const platforms = Array.isArray(ctx.inputs.target_platforms) ? ctx.inputs.target_platforms : [];
     const contentMap = ctx.inputs.content_map as Record<string, unknown> | null;
     const focus = (ctx.inputs.focus as string) ?? '';

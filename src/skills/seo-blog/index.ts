@@ -41,8 +41,8 @@ export const seoBlogSkill: Skill = {
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
-    const topic = ctx.inputs.topic as string;
-    const keywords = (ctx.inputs.keywords as string[]) ?? [];
+    const topic = (ctx.inputs.topic ?? ctx.inputs.keyword ?? ctx.inputs.content ?? "") as string;
+    const keywords = (Array.isArray(ctx.inputs.keywords) ? ctx.inputs.keywords : typeof ctx.inputs.keywords === "string" ? (ctx.inputs.keywords as string).split(",").map((s: string) => s.trim()) : typeof ctx.inputs.keyword === "string" ? [(ctx.inputs.keyword as string)] : []) as string[];
     const wordCount = (ctx.inputs.word_count as number) ?? 1500;
     const style = (ctx.inputs.style as string) ?? 'informational';
     let totalTokens = 0;
@@ -66,10 +66,10 @@ ${brandContext}
 
 Create a detailed blog outline:
 - Topic: ${topic}
-- Target keywords: ${keywords.join(', ') || 'derive from topic'}
+- Target keywords: ${(Array.isArray(keywords) ? keywords : [keywords]).join(', ') || 'derive from topic'}
 - Target word count: ${wordCount}
 - Style: ${style}
-- Brand keywords: ${ctx.brand.keywords.join(', ')}
+- Brand keywords: ${(ctx.brand?.keywords ?? []).join(', ')}
 
 Respond with JSON:
 {

@@ -47,7 +47,7 @@ export const seoOptimizerSkill: Skill = {
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
-    const blogDraft = ctx.inputs.blog_draft as Record<string, unknown>;
+    const blogDraft = (ctx.inputs.blog_draft ?? ctx.inputs.content ?? ctx.inputs.article ?? {}) as Record<string, unknown>;
     const content = (blogDraft.content as string) ?? '';
     const title = (blogDraft.title as string) ?? '';
     const keyword = (ctx.inputs.keyword as string) || ((blogDraft.keyword as string) ?? '');

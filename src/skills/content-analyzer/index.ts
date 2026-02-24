@@ -64,9 +64,9 @@ export const contentAnalyzerSkill: Skill = {
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
-    const transcript = ctx.inputs.raw_transcript as string;
+    const transcript = (ctx.inputs.raw_transcript ?? ctx.inputs.content ?? ctx.inputs.text ?? "") as string;
     const segments = (ctx.inputs.segments as TimestampedSegment[]) ?? [];
-    const platforms = (ctx.inputs.target_platforms as string[]) ?? ['twitter', 'linkedin', 'instagram', 'tiktok', 'blog'];
+    const platforms = (ctx.inputs.target_platforms ?? ctx.inputs.platforms as string[]) ?? ['twitter', 'linkedin', 'instagram', 'tiktok', 'blog'];
 
     const brandContext = buildBrandContext(ctx.brand);
 

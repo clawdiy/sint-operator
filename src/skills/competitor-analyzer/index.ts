@@ -56,7 +56,7 @@ export const competitorAnalyzerSkill: Skill = {
 
   async execute(ctx: SkillContext): Promise<SkillResult> {
     const start = Date.now();
-    const competitors = ctx.inputs.competitors as string[];
+    const competitors = (Array.isArray(ctx.inputs.competitors) ? ctx.inputs.competitors : typeof ctx.inputs.competitors === "string" ? (ctx.inputs.competitors as string).split(",").map((s: string) => s.trim()) : []) as string[];
     const platforms = (ctx.inputs.platforms as string[]) ?? ['twitter', 'linkedin'];
     const focusArea = (ctx.inputs.focus_area as string) ?? '';
 
