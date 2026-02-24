@@ -78,13 +78,13 @@ export function normalizeRunPayload(run: any): any {
 
 // Auth
 export const login = (email: string, password: string) =>
-  request<{ token: string }>('/auth/login', {
+  request<{ token: string }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
 
 export const signup = (email: string, password: string, name: string) =>
-  request<{ token: string }>('/auth/signup', {
+  request<{ token: string }>('/api/auth/signup', {
     method: 'POST',
     body: JSON.stringify({ email, password, name }),
   });
