@@ -44,7 +44,7 @@ export class MeteringTracker {
 
       CREATE TABLE IF NOT EXISTS usage_limits (
         id TEXT PRIMARY KEY DEFAULT 'default',
-        daily_cost_limit REAL DEFAULT 100.0,
+        daily_cost_limit REAL DEFAULT 50000.0,
         monthly_cost_limit REAL DEFAULT 2000.0,
         per_run_cost_limit REAL DEFAULT 50.0,
         enabled INTEGER DEFAULT 1
