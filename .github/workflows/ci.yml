@@ -36,7 +36,7 @@ jobs:
 
   deploy-railway:
     needs: build-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.RAILWAY_TOKEN != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -54,6 +54,11 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
         run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "RAILWAY_TOKEN is not set; skipping Railway deploy."
+            exit 0
+          fi
+
           if [ -n "$RAILWAY_SERVICE" ]; then
             railway up --service "$RAILWAY_SERVICE" --detach
           else
