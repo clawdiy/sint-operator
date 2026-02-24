@@ -1,7 +1,7 @@
 import React from 'react';
 import NotificationBell from './NotificationBell';
 
-type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings';
+type Page = 'dashboard' | 'pipelines' | 'brands' | 'results' | 'assets' | 'usage' | 'skills' | 'settings' | 'approvals';
 
 const NAV_ITEMS: { page: Page; icon: string; label: string }[] = [
   { page: 'dashboard', icon: '🏠', label: 'Dashboard' },
@@ -11,6 +11,7 @@ const NAV_ITEMS: { page: Page; icon: string; label: string }[] = [
   { page: 'assets', icon: '📁', label: 'Assets' },
   { page: 'usage', icon: '📈', label: 'Usage' },
   { page: 'skills', icon: '🧩', label: 'Skills' },
+  { page: 'approvals', icon: '📋', label: 'Approvals' },
   { page: 'settings', icon: '⚙️', label: 'Settings' },
 ];
 

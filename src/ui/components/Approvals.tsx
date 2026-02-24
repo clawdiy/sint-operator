@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { apiGet, apiPost } from '../api';
+const API_BASE = '/v1';
+function getHeaders() {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = localStorage.getItem('sint_auth_token');
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  return h;
+}
+async function apiGet(path: string) {
+  const res = await fetch(`${API_BASE}${path}`, { headers: getHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+async function apiPost(path: string, body: unknown) {
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
 
 interface Approval {
   id: string;

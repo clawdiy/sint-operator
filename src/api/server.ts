@@ -31,6 +31,9 @@ import type { Orchestrator } from '../orchestrator/index.js';
 import { createPublishRoutes } from './publish-routes.js';
 import { closePublishQueueStore, initPublishQueueStore, processQueue } from '../services/social/index.js';
 import { createMCPRoutes } from '../integrations/mcp-skill-server.js';
+import { initTelegramBot, telegramWebhook, stopTelegramBot } from '../integrations/telegram-bot.js';
+import { initWhatsAppBot, whatsappWebhook } from '../integrations/whatsapp-bot.js';
+import { initApprovalStore, closeApprovalStore, listApprovals, getApproval, approveItem, rejectItem, editItem, createApprovalsFromRun } from '../services/approval/index.js';
 import { notifyPipelineComplete, isTelegramConfigured } from '../skills/notifier/telegram.js';
 import { createAuthRouter } from '../auth/auth-routes.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/auth-middleware.js';
@@ -599,6 +602,19 @@ function enqueueAsyncRun(
             { duration: Date.now() - new Date(asyncRun.startedAt).getTime(), costUnits: (result as Record<string, any>)?.metering?.totalCostUnits, tokensUsed: (result as Record<string, any>)?.metering?.totalTokens }
           );
         }
+
+        // Auto-create approval entries
+        try {
+          createApprovalsFromRun({
+            runId: asyncRun.id,
+            pipelineId: asyncRun.pipelineId,
+            brandId: asyncRun.brandId,
+            userId: asyncRun.userId,
+            result,
+          });
+        } catch (e) {
+          console.error('[Approvals] Failed to create approvals:', e);
+        }
       })
       .catch(err => {
         if (asyncRun.status === 'cancelled') return;
@@ -648,6 +664,11 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   initSocialAccountDB(dataDir);
   initNotificationStore(dataDir);
   initPublishQueueStore(dataDir);
+  initApprovalStore(dataDir);
+
+  // Initialize messaging bots
+  initTelegramBot(orchestrator);
+  initWhatsAppBot(orchestrator);
 
   const publishWorkerEnabled = getPublishWorkerEnabled(process.env.PUBLISH_QUEUE_WORKER_ENABLED);
   const publishWorkerIntervalMs = getPublishWorkerIntervalMs(process.env.PUBLISH_QUEUE_WORKER_INTERVAL_MS);
@@ -767,6 +788,11 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   
   // ─── Integrations ────────────────────────────────────────
   app.use("/mcp", createMCPRoutes(orchestrator));
+
+  // ─── Messaging Webhooks ────────────────────────────────
+  app.post('/api/webhooks/telegram', telegramWebhook);
+  app.post('/api/webhooks/whatsapp', whatsappWebhook);
+  app.get('/api/webhooks/whatsapp', whatsappWebhook); // verification
 
   // Rate limiting
   app.use('/api/', generalLimiter);
@@ -1114,6 +1140,43 @@ app.get('/health', (_req, res) => {
   app.use("/api/publish", createPublishRoutes());
   app.use('/api/onboarding', createOnboardingRouter({ brandsDir }));
   app.use('/api/notifications', createNotificationsRouter());
+
+  // ─── Approvals ──────────────────────────────────────────
+
+  app.get('/api/approvals', (req, res) => {
+    const user = getRequestUser(req, res);
+    if (!user) return;
+    const status = parseStringQuery(req.query.status) as any;
+    const items = listApprovals({ userId: brandUserId(user) ? user.userId : undefined, status, limit: parseLimitParam(req.query.limit, 100) });
+    res.json(items);
+  });
+
+  app.get('/api/approvals/:id', (req, res) => {
+    const approval = getApproval(req.params.id);
+    if (!approval) return res.status(404).json({ error: 'Approval not found' });
+    res.json(approval);
+  });
+
+  app.post('/api/approvals/:id/approve', (req, res) => {
+    const success = approveItem(req.params.id);
+    if (!success) return res.status(404).json({ error: 'Approval not found' });
+    res.json({ ok: true, status: 'approved' });
+  });
+
+  app.post('/api/approvals/:id/reject', (req, res) => {
+    const { reason } = req.body || {};
+    const success = rejectItem(req.params.id, reason || 'No reason provided');
+    if (!success) return res.status(404).json({ error: 'Approval not found' });
+    res.json({ ok: true, status: 'rejected' });
+  });
+
+  app.post('/api/approvals/:id/edit', (req, res) => {
+    const { content } = req.body || {};
+    if (!content) return res.status(400).json({ error: 'content required' });
+    const success = editItem(req.params.id, content);
+    if (!success) return res.status(404).json({ error: 'Approval not found' });
+    res.json({ ok: true, status: 'approved' });
+  });
 
   app.post('/api/webhooks', (req, res) => {
     const requestId = getRequestId(req);
@@ -1894,6 +1957,8 @@ app.get('/health', (_req, res) => {
     }
     closePublishQueueStore();
     closeNotificationStore();
+    closeApprovalStore();
+    stopTelegramBot();
     runStore.close();
     webhookStore.close();
   });
