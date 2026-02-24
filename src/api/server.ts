@@ -38,7 +38,7 @@ import { notifyPipelineComplete, isTelegramConfigured } from '../skills/notifier
 import { createAuthRouter } from '../auth/auth-routes.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/auth-middleware.js';
 import { getUser, initAuthDB, verifyToken } from '../auth/auth-service.js';
-import { deleteApiKey, getApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '../auth/api-key-service.js';
+import { deleteApiKey, getApiKey, getAnyStoredApiKey, hasApiKey, initApiKeyDB, storeApiKey } from '../auth/api-key-service.js';
 import { getSocialCredentials, getSocialStatus, initSocialAccountDB, storeSocialCredentials } from '../auth/social-account-service.js';
 import { createOnboardingRouter } from './onboarding.js';
 import { addNotification, closeNotificationStore, createNotificationsRouter, initNotificationStore } from './notifications.js';
@@ -668,6 +668,16 @@ export function createServer(orchestrator: Orchestrator, port: number = 18789, o
   initNotificationStore(dataDir);
   initPublishQueueStore(dataDir);
   initApprovalStore(dataDir);
+
+  // Load API key from DB if not in env
+  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === '' || process.env.OPENAI_API_KEY === 'sk-test') {
+    const storedKey = getAnyStoredApiKey();
+    if (storedKey) {
+      process.env.OPENAI_API_KEY = storedKey;
+      orchestrator.updateApiKeys(storedKey, undefined);
+      console.log('🔑 Loaded OpenAI API key from database');
+    }
+  }
 
   // Initialize messaging bots
   initTelegramBot(orchestrator);

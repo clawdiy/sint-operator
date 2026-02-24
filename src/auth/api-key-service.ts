@@ -135,6 +135,15 @@ export function deleteApiKey(userId: string): void {
   database.prepare('DELETE FROM api_keys WHERE userId = ?').run(userId);
 }
 
+export function getAnyStoredApiKey(): string | null {
+  const database = ensureDb();
+  const row = database.prepare(
+    'SELECT userId, encryptedKey, iv, createdAt FROM api_keys ORDER BY createdAt DESC LIMIT 1'
+  ).get() as ApiKeyRow | undefined;
+  if (!row) return null;
+  return decrypt(row);
+}
+
 export function hasApiKey(userId: string): boolean {
   const database = ensureDb();
   const row = database.prepare('SELECT 1 as found FROM api_keys WHERE userId = ?').get(userId) as { found: number } | undefined;
