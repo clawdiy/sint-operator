@@ -90,9 +90,10 @@ function CharBar({ count, limit }: { count: number; limit: number }) {
   );
 }
 
-function TwitterPreview({ d, index, onEdit, onPublish, copiedId, onCopy }: {
+function TwitterPreview({ d, index, onEdit, onPublish, copiedId, onCopy, image }: {
   d: Deliverable; index: number; onEdit?: (i: number, c: string) => void;
   onPublish?: (p: string, c: string) => void; copiedId: string; onCopy: (t: string, id: string) => void;
+  image?: GeneratedImage;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(d.content);
@@ -122,6 +123,11 @@ function TwitterPreview({ d, index, onEdit, onPublish, copiedId, onCopy }: {
           ) : (
             <div className="twitter-body">{part}</div>
           )}
+          {ti === 0 && image?.url && (
+            <div style={{ margin: '8px 0', borderRadius: 12, overflow: 'hidden', border: '1px solid #2a2a4a' }}>
+              <img src={image.url} alt={image.revisedPrompt || 'Post image'} style={{ width: '100%', maxHeight: 280, objectFit: 'cover', display: 'block' }} loading="lazy" />
+            </div>
+          )}
           {ti === 0 && <CharBar count={d.content.length} limit={limit} />}
         </div>
       ))}
@@ -145,9 +151,10 @@ function TwitterPreview({ d, index, onEdit, onPublish, copiedId, onCopy }: {
   );
 }
 
-function LinkedInPreview({ d, index, onEdit, copiedId, onCopy }: {
+function LinkedInPreview({ d, index, onEdit, copiedId, onCopy, image }: {
   d: Deliverable; index: number; onEdit?: (i: number, c: string) => void;
   copiedId: string; onCopy: (t: string, id: string) => void;
+  image?: GeneratedImage;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(d.content);
@@ -172,6 +179,11 @@ function LinkedInPreview({ d, index, onEdit, copiedId, onCopy }: {
           {d.hook && <div className="linkedin-hook">{d.hook}</div>}
           <div style={{ whiteSpace: 'pre-wrap' }}>{display}</div>
           {truncated && <button className="see-more" onClick={() => setExpanded(true)}>...see more</button>}
+        </div>
+      )}
+      {image?.url && (
+        <div style={{ margin: '8px 0', borderRadius: 12, overflow: 'hidden', border: '1px solid #2a2a4a' }}>
+          <img src={image.url} alt={image.revisedPrompt || 'Post image'} style={{ width: '100%', maxHeight: 300, objectFit: 'cover', display: 'block' }} loading="lazy" />
         </div>
       )}
       <CharBar count={d.content.length} limit={limit} />
@@ -298,10 +310,10 @@ export default function ContentPreview({ deliverables, article, calendar, images
           {deliverables.map((d, i) => {
             const platform = d.platform?.toLowerCase();
             if (platform === 'twitter' || platform === 'x') {
-              return <TwitterPreview key={i} d={d} index={i} onEdit={onEdit} onPublish={onPublish} copiedId={copiedId} onCopy={copyToClipboard} />;
+              return <TwitterPreview key={i} d={d} index={i} onEdit={onEdit} onPublish={onPublish} copiedId={copiedId} onCopy={copyToClipboard} image={images?.[i % (images?.length || 1)]} />;
             }
             if (platform === 'linkedin') {
-              return <LinkedInPreview key={i} d={d} index={i} onEdit={onEdit} copiedId={copiedId} onCopy={copyToClipboard} />;
+              return <LinkedInPreview key={i} d={d} index={i} onEdit={onEdit} copiedId={copiedId} onCopy={copyToClipboard} image={images?.[i % (images?.length || 1)]} />;
             }
             // Generic card for other platforms
             return (
@@ -310,6 +322,11 @@ export default function ContentPreview({ deliverables, article, calendar, images
                   <span className="badge">{platform}</span>
                   {d.format && <span className="badge">{d.format}</span>}
                 </div>
+                {images?.[i % (images?.length || 1)]?.url && (
+                  <div style={{ margin: '8px 0', borderRadius: 12, overflow: 'hidden', border: '1px solid #2a2a4a' }}>
+                    <img src={images[i % (images?.length || 1)].url} alt="Post image" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', display: 'block' }} loading="lazy" />
+                  </div>
+                )}
                 <div className="generic-body" style={{ whiteSpace: 'pre-wrap' }}>{d.content}</div>
                 {PLATFORM_LIMITS[platform] && <CharBar count={d.content.length} limit={PLATFORM_LIMITS[platform]} />}
                 <div className="preview-actions">
