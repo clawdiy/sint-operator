@@ -382,6 +382,9 @@ export class Orchestrator {
 
   getModelUsage() { return this.llm.getUsage(); }
 
+  /** Expose LLM router for ad-hoc completions (e.g. variant generation) */
+  getLLM(): LLMRouterImpl { return this.llm; }
+
   async testLLM() { return this.llm.testConnection(); }
 
   getUsageSummary(days: number = 30) {

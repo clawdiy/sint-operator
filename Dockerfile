@@ -20,15 +20,17 @@ RUN cp -r src/ui/dist /tmp/ui-fallback 2>/dev/null || true
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN CI=true npm run ui:build 2>&1 || echo "⚠️ Vite build failed, using fallback"
 
-# Ensure ui-static exists -- use vite output or fallback
+# Ensure ui-static exists -- use vite output, fallback, or generate minimal page
 RUN mkdir -p dist/ui-static && \
     if [ -f src/ui/dist/index.html ]; then \
+      echo "Using Vite-built UI"; \
       cp -r src/ui/dist/* dist/ui-static/; \
     elif [ -f /tmp/ui-fallback/index.html ]; then \
       echo "Using fallback UI"; \
       cp -r /tmp/ui-fallback/* dist/ui-static/; \
     else \
-      echo "No UI available"; \
+      echo "Generating minimal UI placeholder"; \
+      echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SINT Operator</title></head><body style="background:#0d1117;color:#e6edf3;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><h1>SINT Marketing Operator</h1><p>API is running. <a href="/health" style="color:#58a6ff">/health</a> | <a href="/api/docs" style="color:#58a6ff">/api/docs</a></p></div></body></html>' > dist/ui-static/index.html; \
     fi
 
 # ─── Stage 2: Production ─────────────────────────────────────

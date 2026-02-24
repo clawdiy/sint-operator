@@ -291,43 +291,43 @@ export const retryDeadLetterItem = (id: string) =>
   request<{retried: boolean; item: any}>(`/api/publish/retry/${id}`, { method: 'POST' });
 
 export const deleteRun = (id: string) =>
-  request<{ ok: boolean }>(\`\${BASE}/api/runs/\${id}\`, { method: 'DELETE' });
+  request<{ ok: boolean }>(`/api/runs/${id}`, { method: 'DELETE' });
 
 export const retryRun = (id: string) =>
-  request<{ runId: string; status: string }>(\`\${BASE}/api/runs/\${id}/retry\`, { method: 'POST' });
+  request<{ runId: string; status: string }>(`/api/runs/${id}/retry`, { method: 'POST' });
 
 
 // ─── Templates ─────────────────────────────────────────────
 export const getTemplates = () =>
-  request<Array<{ id: string; name: string; description: string; platforms: string[]; inputs: string[] }>>(\`\${BASE}/api/templates\`);
+  request<Array<{ id: string; name: string; description: string; platforms: string[]; inputs: string[] }>>('/api/templates');
 
 export const generateFromTemplate = (templateId: string, brandId: string, inputs: Record<string, string>) =>
-  request<{ runId: string }>(\`\${BASE}/api/templates/\${templateId}/generate\`, {
+  request<{ runId: string }>(`/api/templates/${templateId}/generate`, {
     method: 'POST',
     body: JSON.stringify({ brandId, ...inputs }),
   });
 
 // ─── Schedules ─────────────────────────────────────────────
 export const getSchedules = () =>
-  request<Array<{ id: string; pipelineId: string; brandId: string; nextRunAt: string; enabled: boolean }>>(\`\${BASE}/api/schedules\`);
+  request<Array<{ id: string; pipelineId: string; brandId: string; nextRunAt: string; enabled: boolean }>>('/api/schedules');
 
 export const createSchedule = (data: { pipelineId: string; brandId: string; nextRunAt: string; cronExpression?: string; inputs?: Record<string, unknown> }) =>
-  request<any>(\`\${BASE}/api/schedules\`, { method: 'POST', body: JSON.stringify(data) });
+  request<any>('/api/schedules', { method: 'POST', body: JSON.stringify(data) });
 
 export const deleteSchedule = (id: string) =>
-  request<{ ok: boolean }>(\`\${BASE}/api/schedules/\${id}\`, { method: 'DELETE' });
+  request<{ ok: boolean }>(`/api/schedules/${id}`, { method: 'DELETE' });
 
 // ─── Analytics ─────────────────────────────────────────────
 export const getAnalytics = () =>
-  request<{ totalRuns: number; completedRuns: number; failedRuns: number; successRate: number; avgDurationMs: number; totalDeliverables: number; topPipelines: Array<{ id: string; count: number }> }>(\`\${BASE}/api/analytics\`);
+  request<{ totalRuns: number; completedRuns: number; failedRuns: number; successRate: number; avgDurationMs: number; totalDeliverables: number; topPipelines: Array<{ id: string; count: number }> }>('/api/analytics');
 
 // ─── Variants ──────────────────────────────────────────────
 export const generateVariants = (brandId: string, content: string, platform: string, count?: number) =>
-  request<{ variants: Array<{ content: string; hook: string; angle: string; tone: string }>; tokensUsed: number }>(\`\${BASE}/api/variants\`, {
+  request<{ variants: Array<{ content: string; hook: string; angle: string; tone: string }>; tokensUsed: number }>('/api/variants', {
     method: 'POST',
     body: JSON.stringify({ brandId, content, platform, count: count || 3 }),
   });
 
 // ─── Export ────────────────────────────────────────────────
 export const exportRuns = (format?: 'json' | 'markdown') =>
-  fetch(\`\${BASE}/api/export?format=\${format || 'json'}\`).then(r => format === 'markdown' ? r.text() : r.json());
+  fetch(`${BASE}/api/export?format=${format || 'json'}`).then(r => format === 'markdown' ? r.text() : r.json());

@@ -305,6 +305,7 @@ export default function Brands() {
             </div>
             <pre>{JSON.stringify(selected, null, 2)}</pre>
           </div>
+          </div>
         </div>
       )}
 
@@ -406,7 +407,6 @@ export default function Brands() {
             </button>
             <button className="btn" onClick={() => setShowCreate(false)}>Cancel</button>
           </div>
-        </div>
           </div>
         </div>
       )}

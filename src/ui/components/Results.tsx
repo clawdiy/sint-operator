@@ -302,8 +302,7 @@ export default function Results() {
             <>
               <div className="live-activity-header" style={{ marginBottom: '10px' }}>
                 <h3 style={{ margin: 0 }}>{friendlyPipeline(selected.pipelineId) || 'Run'} — {new Date(selected.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, {new Date(selected.startedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</h3>
-                {isRunInProgress(selected.status) && (
-                  {isRunInProgress(selected.status) ? (
+                {isRunInProgress(selected.status) ? (
                     <button className="btn danger small" onClick={handleCancelSelectedRun} disabled={canceling}>
                       {canceling ? 'Canceling…' : 'Cancel Run'}
                     </button>
@@ -312,7 +311,6 @@ export default function Results() {
                       🔄 Retry
                     </button>
                   )}
-                )}
               </div>
               <div className="meta-row">
                 <span>Pipeline: <strong>{friendlyPipeline(selected.pipelineId)}</strong></span>
