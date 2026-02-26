@@ -276,6 +276,13 @@ export interface SkillContext {
   tools: ToolServices;
   memory: MemoryService;
   logger: Logger;
+  execution?: {
+    runId: string;
+    pipelineId: string;
+    brandId: string;
+    userId: string;
+    stepId: string;
+  };
 }
 
 export interface SkillResult {

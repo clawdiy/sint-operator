@@ -175,7 +175,7 @@ export function queueForPublishing(
     batchId,
     createdAt: new Date().toISOString(),
     posts,
-    status: 'pending_approval',
+    status: 'pending_review',
   }, null, 2));
 
   logger?.info(`Queued ${posts.length} posts for publishing`, { batchId });

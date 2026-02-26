@@ -7,9 +7,12 @@
  */
 
 import { nanoid } from 'nanoid';
-import { join, resolve } from 'path';
+import { join } from 'path';
 import { ApprovalStore, type Approval, type ApprovalStatus } from '../../core/storage/approval-store.js';
 import { sendTelegramMessage } from '../../skills/notifier/telegram.js';
+import { getQueue, queuePublish, type PublishRequest } from '../social/index.js';
+
+const AUTO_PUBLISH_PLATFORMS = new Set(['twitter', 'linkedin']);
 
 let approvalStore: ApprovalStore | null = null;
 
@@ -116,7 +119,15 @@ export function createApprovalsFromRun(opts: {
  */
 export function approveItem(id: string): boolean {
   if (!approvalStore) return false;
-  return approvalStore.updateStatus(id, 'approved');
+  if (!approvalStore.get(id)) return false;
+
+  const success = approvalStore.updateStatus(id, 'approved');
+  if (!success) return false;
+
+  const updated = approvalStore.get(id);
+  if (!updated) return false;
+  queueApprovalForPublish(updated);
+  return true;
 }
 
 /**
@@ -132,7 +143,15 @@ export function rejectItem(id: string, reason: string): boolean {
  */
 export function editItem(id: string, editedContent: string): boolean {
   if (!approvalStore) return false;
-  return approvalStore.updateStatus(id, 'approved', { editedContent });
+  if (!approvalStore.get(id)) return false;
+
+  const success = approvalStore.updateStatus(id, 'approved', { editedContent });
+  if (!success) return false;
+
+  const updated = approvalStore.get(id);
+  if (!updated) return false;
+  queueApprovalForPublish(updated);
+  return true;
 }
 
 /**
@@ -148,4 +167,34 @@ export function listApprovals(opts?: { userId?: string; status?: ApprovalStatus;
  */
 export function getApproval(id: string): Approval | undefined {
   return approvalStore?.get(id);
+}
+
+function queueApprovalForPublish(approval: Approval): void {
+  const platform = approval.platform?.trim().toLowerCase();
+  if (!platform || !AUTO_PUBLISH_PLATFORMS.has(platform)) return;
+
+  const content = (approval.editedContent ?? approval.contentFull).trim();
+  if (!content) return;
+
+  const existingQueueItems = getQueue({
+    userId: approval.userId,
+    brandId: approval.brandId,
+    limit: 250,
+  });
+
+  const duplicate = existingQueueItems.find(item =>
+    item.runId === approval.runId
+    && item.request.platform === platform
+    && item.request.content === content
+    && item.status !== 'cancelled',
+  );
+
+  if (duplicate) return;
+
+  const request: PublishRequest = {
+    platform: platform as PublishRequest['platform'],
+    content,
+  };
+
+  queuePublish(request, approval.userId, approval.brandId, approval.runId);
 }

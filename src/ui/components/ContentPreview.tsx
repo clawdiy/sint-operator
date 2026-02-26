@@ -384,20 +384,32 @@ export default function ContentPreview({ deliverables, article, calendar, images
         <div className="preview-section">
           <h4 className="preview-section-title">📤 Publish Queue</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {publishQueue.map((job, i) => (
-              <div key={i} style={{ 
-                background: '#1a1a2e', borderRadius: 8, padding: '12px 16px', 
+            {publishQueue.map((job, i) => {
+              const normalizedStatus =
+                job.status === 'queued' ? 'pending'
+                  : job.status === 'pending_approval' ? 'pending_review'
+                    : job.status;
+              const statusStyles = normalizedStatus === 'pending'
+                ? { bg: '#22c55e22', fg: '#22c55e' }
+                : normalizedStatus === 'pending_review'
+                  ? { bg: '#eab30822', fg: '#eab308' }
+                  : normalizedStatus === 'failed'
+                    ? { bg: '#ef444422', fg: '#ef4444' }
+                    : { bg: '#6366f122', fg: '#6366f1' };
+              return (
+              <div key={i} style={{
+                background: '#1a1a2e', borderRadius: 8, padding: '12px 16px',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 borderLeft: '3px solid ' + (PLATFORM_COLORS[job.platform] || '#6366f1')
               }}>
                 <div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
                     <span className="badge">{job.platform}</span>
-                    <span style={{ 
+                    <span style={{
                       fontSize: 11, padding: '2px 8px', borderRadius: 999,
-                      background: job.status === 'queued' ? '#22c55e22' : job.status === 'pending_approval' ? '#eab30822' : '#6366f122',
-                      color: job.status === 'queued' ? '#22c55e' : job.status === 'pending_approval' ? '#eab308' : '#6366f1',
-                    }}>{job.status}</span>
+                      background: statusStyles.bg,
+                      color: statusStyles.fg,
+                    }}>{normalizedStatus}</span>
                   </div>
                   <div style={{ fontSize: 13, color: '#94a3b8' }}>
                     📅 {new Date(job.scheduledAt).toLocaleString()}
@@ -413,7 +425,8 @@ export default function ContentPreview({ deliverables, article, calendar, images
                   <PublishButton platform={job.platform} content={job.content} />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -6,16 +6,20 @@
  * the approval system for human-in-the-loop workflows.
  */
 
-import type { Skill, SkillContext, SkillResult } from '../../core/types.js';
+import type { Platform, Skill, SkillContext, SkillResult } from '../../core/types.js';
+import { queuePublish, type PublishRequest } from '../../services/social/index.js';
+
+type PublisherJobStatus = 'pending' | 'pending_review' | 'published' | 'failed';
 
 interface PublishJob {
   id: string;
+  queueId?: string;
   platform: string;
   content: string;
   scheduledAt: string;
   imageUrl?: string;
   videoUrl?: string;
-  status: 'queued' | 'pending_approval' | 'approved' | 'published' | 'failed';
+  status: PublisherJobStatus;
   metadata: Record<string, unknown>;
 }
 
@@ -45,6 +49,9 @@ export const contentPublisherSkill: Skill = {
     const images = ctx.inputs.images as Record<string, unknown> ?? {};
     const videoClips = ctx.inputs.video_clips as Record<string, unknown> ?? {};
     const autoSchedule = ctx.inputs.auto_schedule === true || ctx.inputs.auto_schedule === 'true';
+    const userId = ctx.execution?.userId ?? ctx.brand.userId ?? 'default';
+    const brandId = ctx.execution?.brandId ?? ctx.brand.id;
+    const runId = ctx.execution?.runId;
     
     const deliverablesList = (deliverables as any)?.deliverables ?? 
                              (deliverables as any)?.items ?? 
@@ -52,6 +59,10 @@ export const contentPublisherSkill: Skill = {
                              [];
     
     const imagesList = (images as any)?.images ?? [];
+    const clipsList = (videoClips as any)?.clips ??
+      (videoClips as any)?.video_clips ??
+      (videoClips as any)?.items ??
+      [];
     
     const calendarEntries = (calendar as any)?.calendar ??
                             (calendar as any)?.schedule ??
@@ -67,8 +78,9 @@ export const contentPublisherSkill: Skill = {
     
     for (let i = 0; i < items.length; i++) {
       const item = items[i] as Record<string, unknown>;
-      const platform = (item?.platform as string) ?? 'unknown';
+      const platform = normalizePlatform(item?.platform);
       const content = (item?.content as string) ?? (item?.text as string) ?? JSON.stringify(item);
+      const hashtags = normalizeHashtags(item?.hashtags);
       
       // Find matching calendar slot
       const calendarSlot = Array.isArray(calendarEntries) 
@@ -90,26 +102,52 @@ export const contentPublisherSkill: Skill = {
 
       // Assign image if available
       const image = Array.isArray(imagesList) && imagesList[i % imagesList.length];
-      
-      const job: PublishJob = {
-        id: `pub_${Date.now()}_${i}_${platform}`,
+      const clip = Array.isArray(clipsList) && clipsList.length > 0 ? clipsList[i % clipsList.length] : undefined;
+
+      const request: PublishRequest = {
         platform,
         content: typeof content === 'string' ? content : JSON.stringify(content),
+        ...(hashtags.length > 0 ? { hashtags } : {}),
+        ...(image?.url ? { media: [image.url] } : {}),
+      };
+
+      let status: PublisherJobStatus = autoSchedule ? 'pending' : 'pending_review';
+      let queueId: string | undefined;
+
+      if (autoSchedule) {
+        const queued = queuePublish(
+          request,
+          userId,
+          brandId,
+          runId,
+          scheduledAt.toISOString(),
+        );
+        queueId = queued.id;
+        status = queued.status === 'cancelled' ? 'failed' : queued.status;
+      }
+      
+      const job: PublishJob = {
+        id: queueId ?? `pub_${Date.now()}_${i}_${platform}`,
+        ...(queueId ? { queueId } : {}),
+        platform,
+        content: request.content,
         scheduledAt: scheduledAt.toISOString(),
-        imageUrl: image?.url ?? image?.revisedPrompt ?? undefined,
-        status: autoSchedule ? 'queued' : 'pending_approval',
+        imageUrl: image?.url ?? undefined,
+        videoUrl: clip?.url ?? clip?.videoUrl ?? undefined,
+        status,
         metadata: {
           deliverableIndex: i,
           calendarSlot: calendarSlot ?? null,
           contentType: (item as any)?.type ?? (item as any)?.format ?? 'post',
-          hashtags: (item as any)?.hashtags ?? [],
+          hashtags,
+          publishRequest: request,
         },
       };
 
       jobs.push(job);
     }
 
-    // Store jobs in memory for the publish queue worker to pick up
+    // Keep a searchable trace in memory for observability/debugging.
     if (ctx.memory) {
       try {
         await ctx.memory.store(
@@ -132,7 +170,7 @@ export const contentPublisherSkill: Skill = {
       `📋 Created ${jobs.length} publish jobs:`,
       ...Object.entries(platformCounts).map(([p, c]) => `  • ${p}: ${c} posts`),
       `📅 Scheduled across ${new Set(jobs.map(j => j.scheduledAt.split('T')[0])).size} days`,
-      `🔒 Status: ${autoSchedule ? 'Auto-queued for publishing' : 'Pending approval — review in dashboard or Telegram'}`,
+      `🔒 Status: ${autoSchedule ? 'Queued (pending) in durable publish queue' : 'Pending review — approve before queueing'}`,
     ].join('\n');
 
     return {
@@ -150,6 +188,22 @@ export const contentPublisherSkill: Skill = {
     };
   },
 };
+
+function normalizePlatform(platform: unknown): Platform {
+  const raw = typeof platform === 'string' ? platform.trim().toLowerCase() : '';
+  if (raw === 'x' || raw === 'threads') return 'twitter';
+  if (!raw) return 'twitter';
+  return raw as Platform;
+}
+
+function normalizeHashtags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((tag): tag is string => typeof tag === 'string')
+    .map(tag => tag.trim())
+    .filter(tag => tag.length > 0)
+    .map(tag => tag.startsWith('#') ? tag.slice(1) : tag);
+}
 
 function getOptimalHour(platform: string): number {
   const hours: Record<string, number> = {

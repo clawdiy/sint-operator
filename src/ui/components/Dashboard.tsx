@@ -216,7 +216,7 @@ export default function Dashboard({ onNavigate }: Props) {
       getUsage(1).catch(() => null),
       getBrands().catch(() => []),
       getDeadLetterQueue({ limit: 8 }).catch(() => ({ items: [] })),
-      getApprovals('pending').catch(() => []),
+      getApprovals('pending_review').catch(() => []),
     ]).then(([h, r, u, b, dlResult, approvals]) => {
       setHealth(h);
       const normalizedRuns = Array.isArray(r) ? sortRunsByStartedAt(r.map(normalizeRunPayload)) : [];

@@ -357,6 +357,30 @@ describe('Pipeline Engine', () => {
       expect(result).toBe('Hello World!');
     });
 
+    it('should resolve nested $path references from object outputs', () => {
+      const vars = new Map<string, unknown>();
+      vars.set('$article', { title: 'Winning with AI' });
+
+      const result = resolveValue('$article.title', vars);
+      expect(result).toBe('Winning with AI');
+    });
+
+    it('should resolve indexed $path references from array outputs', () => {
+      const vars = new Map<string, unknown>();
+      vars.set('$ad_variations', { headline_variations: ['Hook A', 'Hook B'] });
+
+      const result = resolveValue('$ad_variations.headline_variations[0]', vars);
+      expect(result).toBe('Hook A');
+    });
+
+    it('should resolve inline $path expressions in plain strings', () => {
+      const vars = new Map<string, unknown>();
+      vars.set('$article', { title: 'Winning with AI' });
+
+      const result = resolveValue('Title: $article.title.', vars);
+      expect(result).toBe('Title: Winning with AI.');
+    });
+
     it('should resolve $ref objects', () => {
       const vars = new Map<string, unknown>();
       vars.set('$output', { data: 'test' });

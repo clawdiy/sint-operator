@@ -189,6 +189,8 @@ export async function executePipeline(opts: ExecuteOptions): Promise<PipelineRun
   const variables = new Map<string, unknown>();
 
   // Copy pipeline inputs to variables
+  variables.set('inputs', opts.inputs);
+  variables.set('$inputs', opts.inputs);
   for (const [key, value] of Object.entries(opts.inputs)) {
     variables.set(`inputs.${key}`, value);
   }
@@ -427,6 +429,13 @@ async function executeStep(step: PipelineStep, ctx: StepContext): Promise<StepRu
           tools: ctx.tools,
           memory: ctx.memory,
           logger: ctx.logger,
+          execution: {
+            runId: ctx.runId,
+            pipelineId: ctx.pipelineId,
+            brandId: ctx.brandId,
+            userId: ctx.brand.userId,
+            stepId: step.id,
+          },
         }),
         sleep(stepTimeoutMs).then(() => {
           throw new Error(`Step "${step.id}" timed out after ${stepTimeoutMs}ms`);
@@ -500,17 +509,28 @@ export function resolveValue(value: unknown, variables: Map<string, unknown>): u
     // Must check before $variable to avoid catching ${...} as a $-ref
     if (value.startsWith('${') && value.endsWith('}') && !value.slice(2, -1).includes('${')) {
       const path = value.slice(2, -1);
-      return variables.get(path) ?? variables.get(`$${path}`) ?? value;
+      const resolved = resolveReference(path, variables);
+      return resolved ?? value;
     }
     // $variable reference (direct, but not ${...} templates)
-    if (value.startsWith('$') && !value.startsWith('${')) {
-      return variables.get(value) ?? value;
+    if (isBareReference(value)) {
+      const resolved = resolveReference(value, variables);
+      return resolved ?? value;
     }
-    // Inline template replacement
-    return value.replace(/\$\{([^}]+)\}/g, (_, path) => {
-      const val = variables.get(path) ?? variables.get(`$${path}`);
-      return val !== undefined ? String(val) : `\${${path}}`;
+    // Inline ${...} template replacement first
+    const withBraces = value.replace(/\$\{([^}]+)\}/g, (_, path) => {
+      const resolved = resolveReference(path, variables);
+      return resolved !== undefined ? String(resolved) : `\${${path}}`;
     });
+
+    // Inline $path replacement (e.g. "Title: $article.title")
+    return withBraces.replace(
+      /(^|[^$\w])\$([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])*)/g,
+      (full, prefix: string, referencePath: string) => {
+        const resolved = resolveReference(`$${referencePath}`, variables);
+        return resolved !== undefined ? `${prefix}${String(resolved)}` : full;
+      },
+    );
   }
 
   if (typeof value === 'object' && value !== null && '$ref' in value) {
@@ -519,6 +539,82 @@ export function resolveValue(value: unknown, variables: Map<string, unknown>): u
   }
 
   return value;
+}
+
+function isBareReference(value: string): boolean {
+  return /^\$[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])*$/.test(value.trim());
+}
+
+function resolveReference(reference: string, variables: Map<string, unknown>): unknown {
+  const trimmed = reference.trim();
+  if (!trimmed) return undefined;
+
+  const directCandidates = trimmed.startsWith('$')
+    ? [trimmed, trimmed.slice(1)]
+    : [trimmed, `$${trimmed}`];
+
+  for (const candidate of directCandidates) {
+    if (variables.has(candidate)) {
+      return variables.get(candidate);
+    }
+  }
+
+  const noDollar = trimmed.startsWith('$') ? trimmed.slice(1) : trimmed;
+  const segments = parseReferenceSegments(noDollar);
+  if (segments.length === 0) return undefined;
+
+  const [root, ...rest] = segments;
+  if (typeof root !== 'string') return undefined;
+
+  const rootCandidates = [`$${root}`, root];
+  let rootValue: unknown = undefined;
+
+  for (const candidate of rootCandidates) {
+    if (variables.has(candidate)) {
+      rootValue = variables.get(candidate);
+      break;
+    }
+  }
+
+  if (rootValue === undefined) return undefined;
+  return getPathValue(rootValue, rest);
+}
+
+function parseReferenceSegments(path: string): Array<string | number> {
+  const segments: Array<string | number> = [];
+  const matcher = /([A-Za-z_][A-Za-z0-9_]*)|\[(\d+)\]/g;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = matcher.exec(path)) !== null) {
+    if (match[1]) {
+      segments.push(match[1]);
+      continue;
+    }
+    if (match[2]) {
+      segments.push(Number.parseInt(match[2], 10));
+    }
+  }
+
+  return segments;
+}
+
+function getPathValue(root: unknown, path: Array<string | number>): unknown {
+  let current: unknown = root;
+
+  for (const segment of path) {
+    if (current === null || current === undefined) return undefined;
+
+    if (typeof segment === 'number') {
+      if (!Array.isArray(current)) return undefined;
+      current = current[segment];
+      continue;
+    }
+
+    if (typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  return current;
 }
 
 export function evaluateCondition(condition: string, variables: Map<string, unknown>): boolean {
